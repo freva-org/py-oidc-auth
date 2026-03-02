@@ -35,15 +35,15 @@ For FastAPI, the same idea is expressed as dependencies.
 
 ## Install
 
-Pick the extra for your framework:
+Pick your framework for installation:
 
-```bash
-pip install py-oidc-auth[fastapi]
-pip install py-oidc-auth[flask]
-pip install py-oidc-auth[quart]
-pip install py-oidc-auth[tornado]
-pip install py-oidc-auth[litestar]
-pip install py-oidc-auth[django]
+```console
+python -m pip install py-oidc-auth[fastapi]
+python -m pip install py-oidc-auth[flask]
+python -m pip install py-oidc-auth[quart]
+python -m pip install py-oidc-auth[tornado]
+python -m pip install py-oidc-auth[litestar]
+python -m pip install py-oidc-auth[django]
 ```
 
 Import name is `py_oidc_auth`:
@@ -261,16 +261,4 @@ def admin(token):
     return {"sub": token.sub}
 ```
 
-## Documentation
 
-Docs are built with Sphinx using autodoc and RST pages.
-
-Local build:
-
-```bash
-pip install -e .[docs]
-cd docs
-make html
-```
-
-If you build docs without installing all framework extras, use `autodoc_mock_imports` in `docs/conf.py`.
