@@ -1,0 +1,48 @@
+Tornado integration
+===================
+
+Install
+^^^^^^^
+
+.. code-block:: text
+
+   pip install py-oidc-auth[tornado]
+
+Minimal application
+^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: python
+
+   import tornado.web
+   import tornado.ioloop
+   from py_oidc_auth import TornadoOIDCAuth
+
+   auth = TornadoOIDCAuth(
+       client_id="my client",
+       client_secret="secret",
+       discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+       scopes="openid profile email",
+   )
+
+   class MeHandler(tornado.web.RequestHandler):
+       @auth.required()
+       async def get(self, token):
+           self.write({"sub": token.sub})
+
+   def make_app():
+       return tornado.web.Application(
+           [
+               (r"/me", MeHandler),
+               *auth.get_urlpatterns(prefix=""),
+           ]
+       )
+
+   if __name__ == "__main__":
+       make_app().listen(8080)
+       tornado.ioloop.IOLoop.current().start()
+
+Notes
+^^^^^
+
+The Tornado adapter exposes ``get_urlpatterns`` for auth endpoints and decorator
+helpers for handler methods.
