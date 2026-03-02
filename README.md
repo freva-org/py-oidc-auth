@@ -2,24 +2,37 @@
   <img src="docs/source/_static/logo.png" alt="py-oidc-auth logo" width="560">
 </p>
 <p align="center">
-<em>A small, typed OpenID Connect helper with:</em>
+<em>A small, typed OpenID Connect helper for authentication and authorization.</em>
 </p>
-<p align="center">
-<ul>
-<li> a framework independent async core: `OIDCAuth`
-<li> framework adapters that expose common auth endpoints
-<li> simple `required()` and `optional()` helpers to protect routes
-</ul>
-</p>
+
+It porvides
+
+* a framework independent async core: `OIDCAuth`
+* framework adapters that expose common auth endpoints
+* simple `required()` and `optional()` helpers to protect routes
 
 ## Supported frameworks
 
-* FastAPI
-* Flask
-* Quart
-* Tornado
-* Litestar
-* Django
+<p align="center">
+  <a href="https://fastapi.tiangolo.com/" title="FastAPI">
+    <img src="https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png" alt="FastAPI" height="40">
+  </a>
+  <a href="https://flask.palletsprojects.com/" title="Flask">
+    <img src="https://flask.palletsprojects.com/en/stable/_images/flask-name.svg" alt="Flask" height="40">
+  </a>
+  <a href="https://quart.palletsprojects.com/" title="Quart">
+    <img src="https://quart.palletsprojects.com/en/stable/_images/logo.png" alt="Quart" height="40">
+  </a>
+  <a href="https://www.tornadoweb.org/" title="Tornado">
+    <img src="https://www.tornadoweb.org/en/stable/_images/tornado.png" alt="Tornado" height="40">
+  </a>
+  <a href="https://litestar.dev/" title="Litestar">
+    <img src="https://litestar.dev/_static/logo.svg" alt="Litestar" height="40">
+  </a>
+  <a href="https://www.djangoproject.com/" title="Django">
+    <img src="https://www.djangoproject.com/m/img/logos/django-logo-positive.svg" alt="Django" height="40">
+  </a>
+</p>
 
 ## Features
 
@@ -30,7 +43,7 @@
 * Provider initiated logout (end session) when supported
 * Bearer token validation using provider JWKS, issuer, and audience
 * Optional scope checks and simple claim constraints
-* Ships `py.typed`
+* Full type annotation 🏷️
 
 ## Install
 
@@ -261,4 +274,4 @@ def admin(token):
 ```
 
 ## Contributing
-See the [CONTRIBUTIN.md] document to get involved.
+See the [CONTRIBUTING.md](CONTRIBUTING.md) document to get involved.
