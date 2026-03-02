@@ -9,7 +9,7 @@ on: [push, pull_request, workflow_call]
 
 jobs:
   lint-and-docs:
-    name: Build wheels
+    name: Linting
     runs-on: ubuntu-latest
 
     steps:
@@ -53,7 +53,7 @@ jobs:
           docker compose -f dev-env/docker-compose.yaml up -d --remove-orphans
       - name: Waiting for keycloak
         run: >
-          python dev-env/config/dev-utils.py oidc
+          python dev-env/config/dev_utils.py oidc
           http://localhost:8080/realms/freva/.well-known/openid-configuration
       - name: Run tests
         run: tox -e test

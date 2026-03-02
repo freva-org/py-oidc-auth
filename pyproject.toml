@@ -124,6 +124,7 @@ commands =
 [testenv:docs]
 description = "Create the documentation."
 deps = -e .[docs]
+       codespell
 allowlist_externals = make
                       codespell
 commands = codespell {posargs: --quiet-level=2} docs/source
