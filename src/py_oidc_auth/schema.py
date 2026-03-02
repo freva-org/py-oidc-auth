@@ -40,7 +40,7 @@ class IDToken(BaseModel):
 
     iss: Optional[str] = None
     sub: Optional[str] = None
-    aud: Optional[str | List[str]] = None
+    aud: Optional[Union[str, List[str]]] = None
     exp: Optional[int] = None
     iat: Optional[int] = None
     nbf: Optional[int] = None

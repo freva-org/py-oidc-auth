@@ -221,7 +221,7 @@ class FastApiOIDCAuth(OIDCAuth):
         device_flow: Optional[str] = "/auth/v2/device",
         logout: Optional[str] = "/auth/v2/logout",
         userinfo: Optional[str] = "/auth/v2/userinfo",
-        tags: Optional[List[str | Enum]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
     ) -> "APIRouter":
         """Build an :class:`fastapi.APIRouter` with standard auth endpoints.
 
