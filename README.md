@@ -1,16 +1,15 @@
-# py-oidc-auth
-
-A small, typed OpenID Connect helper with:
-
-* a framework independent async core: `OIDCAuth`
-* framework adapters that expose common auth endpoints
-* simple `required()` and `optional()` helpers to protect routes
-
-The primary user experience is decorator style where the framework supports it.
-For FastAPI, the same idea is expressed as dependencies.
-
 <p align="center">
   <img src="docs/source/_static/logo.png" alt="py-oidc-auth logo" width="560">
+</p>
+<p align="center">
+<em>A small, typed OpenID Connect helper with:</em>
+</p>
+<p align="center">
+<ul>
+<li> a framework independent async core: `OIDCAuth`
+<li> framework adapters that expose common auth endpoints
+<li> simple `required()` and `optional()` helpers to protect routes
+</ul>
 </p>
 
 ## Supported frameworks
@@ -261,4 +260,6 @@ def admin(token):
     return {"sub": token.sub}
 ```
 
+## Contributing
 
+See the [Contributing.md] to get involved.
