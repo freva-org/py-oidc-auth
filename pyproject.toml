@@ -53,6 +53,7 @@ docs = ["sphinx-execute-code-python3",
         "sphinx-togglebutton",
         "sphinxcontrib-httpdomain",
         "sphinxext-opengraph",
+        "sphinx-design",
         "pydata-sphinx-theme"
         ]
 [package-data]

@@ -46,7 +46,7 @@ Use ``token=auth.required()`` or ``token=auth.optional()``.
        return {"sub": token.sub}
 
 Standard auth endpoints
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 
 The router created by :meth:`py_oidc_auth.fastapi_auth.FastApiOIDCAuth.create_auth_router`
 exposes these endpoints by default:

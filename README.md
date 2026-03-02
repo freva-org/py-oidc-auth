@@ -14,26 +14,48 @@ It porvides
 ## Supported frameworks
 
 <p align="center">
-  <a href="https://fastapi.tiangolo.com/" title="FastAPI">
-    <img src="https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png" alt="FastAPI" height="40">
-  </a>
-  <a href="https://flask.palletsprojects.com/" title="Flask">
-    <img src="https://flask.palletsprojects.com/en/stable/_images/flask-name.svg" alt="Flask" height="40">
-  </a>
-  <a href="https://quart.palletsprojects.com/" title="Quart">
-    <img src="https://quart.palletsprojects.com/en/stable/_images/logo.png" alt="Quart" height="40">
-  </a>
-  <a href="https://www.tornadoweb.org/" title="Tornado">
-    <img src="https://www.tornadoweb.org/en/stable/_images/tornado.png" alt="Tornado" height="40">
-  </a>
-  <a href="https://litestar.dev/" title="Litestar">
-    <img src="https://litestar.dev/_static/logo.svg" alt="Litestar" height="40">
-  </a>
-  <a href="https://www.djangoproject.com/" title="Django">
-    <img src="https://www.djangoproject.com/m/img/logos/django-logo-positive.svg" alt="Django" height="40">
-  </a>
-</p>
+  <figure style="display:inline-block; margin:0 14px; text-align:center;">
+    <a href="https://fastapi.tiangolo.com/" title="FastAPI">
+      <img src="docs/source/_static/fastapi-logo.png" alt="FastAPI" height="40">
+    </a>
+    <figcaption style="font-size:12px;">FastAPI</figcaption>
+  </figure>
 
+  <figure style="display:inline-block; margin:0 14px; text-align:center;">
+    <a href="https://flask.palletsprojects.com/" title="Flask">
+      <img src="docs/source/_static/flask-logo.svg" alt="Flask" height="40">
+    </a>
+    <figcaption style="font-size:12px;">Flask</figcaption>
+  </figure>
+
+  <figure style="display:inline-block; margin:0 14px; text-align:center;">
+    <a href="https://quart.palletsprojects.com/" title="Quart">
+      <img src="docs/source/_static/quart-logo.png" alt="Quart" height="40">
+    </a>
+    <figcaption style="font-size:12px;">Quart</figcaption>
+  </figure>
+
+  <figure style="display:inline-block; margin:0 14px; text-align:center;">
+    <a href="https://www.tornadoweb.org/" title="Tornado">
+      <img src="docs/source/_static/tornado-logo.png" alt="Tornado" height="40">
+    </a>
+    <figcaption style="font-size:12px;">Tornado</figcaption>
+  </figure>
+
+  <figure style="display:inline-block; margin:0 14px; text-align:center;">
+    <a href="https://litestar.dev/" title="Litestar">
+      <img src="docs/source/_static/litestar-logo.svg" alt="Litestar" height="40">
+    </a>
+    <figcaption style="font-size:12px;">Litestar</figcaption>
+  </figure>
+
+  <figure style="display:inline-block; margin:0 14px; text-align:center;">
+    <a href="https://www.djangoproject.com/" title="Django">
+      <img src="docs/source/_static/django-logo.svg" alt="Django" height="40">
+    </a>
+    <figcaption style="font-size:12px;">Django</figcaption>
+  </figure>
+</p>
 ## Features
 
 * Authorization code flow with PKCE (login and callback)

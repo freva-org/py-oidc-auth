@@ -25,6 +25,7 @@ extensions = [
     "sphinx_togglebutton",
     "sphinxcontrib.httpdomain",
     "sphinx_execute_code",
+    "sphinx_design",
     "sphinxext.opengraph",
 ]
 
