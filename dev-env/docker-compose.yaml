@@ -1,0 +1,43 @@
+---
+services:
+  keycloak:
+    networks:
+      - freva-rest
+    image: quay.io/keycloak/keycloak
+    environment:
+      KEYCLOAK_ADMIN: keycloak
+      KEYCLOAK_ADMIN_PASSWORD: secret
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      JAVA_OPTS_APPEND: "-Djava.net.preferIPv4Stack=true"
+    hostname: keycloak
+    volumes:
+      - ./certs:/certs
+      - ./keycloak/import:/opt/keycloak/data/import:z
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    command: |
+         start-dev
+         --hostname-strict=false
+         --import-realm
+         -Dkeycloak.migration.strategy=OVERWRITE_EXISTING
+
+  keycloak-bootstrap:
+    image: docker.io/badouralix/curl-jq
+    depends_on:
+      - keycloak
+    volumes:
+      - ./create-user.sh:/create-user.sh:ro
+    environment:
+      USER: ${USER}
+      KEYCLOAK_ADMIN: keycloak
+      KEYCLOAK_ADMIN_PASSWORD: secret
+      KEYCLOAK_HOST: keycloak:8080
+    entrypoint: ["sh", "/create-user.sh"]
+    networks:
+      - freva-rest
+
+networks:
+  freva-rest:
+    driver: bridge
