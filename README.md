@@ -12,50 +12,49 @@ It porvides
 * simple `required()` and `optional()` helpers to protect routes
 
 ## Supported frameworks
+<table align="center">
+  <tr>
+    <td align="center" width="180">
+      <a href="https://fastapi.tiangolo.com/" title="FastAPI">
+        <img src="docs/source/_static/fastapi-logo.png" alt="FastAPI" height="40">
+      </a><br>
+      <sub>FastAPI</sub>
+    </td>
+    <td align="center" width="180">
+      <a href="https://flask.palletsprojects.com/" title="Flask">
+        <img src="docs/source/_static/flask-logo.svg" alt="Flask" height="40">
+      </a><br>
+      <sub>Flask</sub>
+    </td>
+    <td align="center" width="180">
+      <a href="https://quart.palletsprojects.com/" title="Quart">
+        <img src="docs/source/_static/quart-logo.png" alt="Quart" height="40">
+      </a><br>
+      <sub>Quart</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://www.tornadoweb.org/" title="Tornado">
+        <img src="docs/source/_static/tornado-logo.png" alt="Tornado" height="40">
+      </a><br>
+      <sub>Tornado</sub>
+    </td>
+    <td align="center" width="180">
+      <a href="https://litestar.dev/" title="Litestar">
+        <img src="docs/source/_static/litestar-logo.svg" alt="Litestar" height="40">
+      </a><br>
+      <sub>Litestar</sub>
+    </td>
+    <td align="center" width="180">
+      <a href="https://www.djangoproject.com/" title="Django">
+        <img src="docs/source/_static/django-logo.svg" alt="Django" height="40">
+      </a><br>
+      <sub>Django</sub>
+    </td>
+  </tr>
+</table>
 
-<p align="center">
-  <figure style="display:inline-block; margin:0 14px; text-align:center;">
-    <a href="https://fastapi.tiangolo.com/" title="FastAPI">
-      <img src="docs/source/_static/fastapi-logo.png" alt="FastAPI" height="40">
-    </a>
-    <figcaption style="font-size:12px;">FastAPI</figcaption>
-  </figure>
-
-  <figure style="display:inline-block; margin:0 14px; text-align:center;">
-    <a href="https://flask.palletsprojects.com/" title="Flask">
-      <img src="docs/source/_static/flask-logo.svg" alt="Flask" height="40">
-    </a>
-    <figcaption style="font-size:12px;">Flask</figcaption>
-  </figure>
-
-  <figure style="display:inline-block; margin:0 14px; text-align:center;">
-    <a href="https://quart.palletsprojects.com/" title="Quart">
-      <img src="docs/source/_static/quart-logo.png" alt="Quart" height="40">
-    </a>
-    <figcaption style="font-size:12px;">Quart</figcaption>
-  </figure>
-
-  <figure style="display:inline-block; margin:0 14px; text-align:center;">
-    <a href="https://www.tornadoweb.org/" title="Tornado">
-      <img src="docs/source/_static/tornado-logo.png" alt="Tornado" height="40">
-    </a>
-    <figcaption style="font-size:12px;">Tornado</figcaption>
-  </figure>
-
-  <figure style="display:inline-block; margin:0 14px; text-align:center;">
-    <a href="https://litestar.dev/" title="Litestar">
-      <img src="docs/source/_static/litestar-logo.svg" alt="Litestar" height="40">
-    </a>
-    <figcaption style="font-size:12px;">Litestar</figcaption>
-  </figure>
-
-  <figure style="display:inline-block; margin:0 14px; text-align:center;">
-    <a href="https://www.djangoproject.com/" title="Django">
-      <img src="docs/source/_static/django-logo.svg" alt="Django" height="40">
-    </a>
-    <figcaption style="font-size:12px;">Django</figcaption>
-  </figure>
-</p>
 ## Features
 
 * Authorization code flow with PKCE (login and callback)
