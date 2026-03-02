@@ -261,5 +261,4 @@ def admin(token):
 ```
 
 ## Contributing
-
-See the [Contributing.md] to get involved.
+See the [CONTRIBUTIN.md] document to get involved.
