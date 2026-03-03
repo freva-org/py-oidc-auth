@@ -27,7 +27,13 @@ extensions = [
     "sphinx_execute_code",
     "sphinx_design",
     "sphinxext.opengraph",
+    "sphinx.ext.intersphinx",
 ]
+
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "litestar": ("https://docs.litestar.dev/latest", None),
+}
 
 autodoc_mock_imports = [
     # FastAPI
@@ -70,6 +76,7 @@ html_theme = "pydata_sphinx_theme"
 html_logo = None
 templates_path = ["_templates"]
 html_favicon = os.path.join(html_static_path[0], "favicon.ico")
+html_css_files = ["custom.css"]
 html_theme_options = {
     "icon_links": [
         {

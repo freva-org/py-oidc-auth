@@ -235,9 +235,7 @@ def _create_flask_app() -> Any:
 
     app = Flask("test")
 
-    app.register_blueprint(
-        fl_auth.create_auth_blueprint(prefix="/api/test")
-    )
+    app.register_blueprint(fl_auth.create_auth_blueprint(prefix="/api/test"))
 
     @app.get("/protected")
     @fl_auth.required()
@@ -306,9 +304,7 @@ def _create_quart_app() -> Any:
     )
 
     app = Quart("test")
-    app.register_blueprint(
-        qt_auth.create_auth_blueprint(prefix="/api/test")
-    )
+    app.register_blueprint(qt_auth.create_auth_blueprint(prefix="/api/test"))
 
     @app.get("/protected")
     @qt_auth.required()

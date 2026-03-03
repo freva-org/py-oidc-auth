@@ -36,14 +36,15 @@ Both sync and async views are supported.
 
 .. code-block:: python
 
-   from django.http import JsonResponse
+   from django.http import HttpRequest, JsonResponse
+   from py_oidc_auth import IDToken
 
    @auth.required()
-   def me(request, token):
+   def me(request: HttpRequest, token: IDToken) -> JsonResponse:
        return JsonResponse({"sub": token.sub})
 
    @auth.optional()
-   async def maybe_me(request, token):
+   async def maybe_me(request: HttpRequest, token: IDToken) -> JsonResponse:
        if token is None:
            return JsonResponse({"anonymous": True})
        return JsonResponse({"sub": token.sub})

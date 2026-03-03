@@ -35,12 +35,15 @@ Use ``token=auth.required()`` or ``token=auth.optional()``.
 
 .. code-block:: python
 
+   from typing import Dict, Optional
+   from py_oidc_auth import IDToken
+
    @app.get("/me")
-   async def me(token=auth.required()):
+   async def me(token: IDToken = auth.required()) -> Dict[str, str]:
        return {"sub": token.sub}
 
    @app.get("/maybe_me")
-   async def maybe_me(token=auth.optional()):
+   async def maybe_me(token: Optional[IDToken] = auth.optional()) -> Dict[str, str]:
        if token is None:
            return {"anonymous": True}
        return {"sub": token.sub}

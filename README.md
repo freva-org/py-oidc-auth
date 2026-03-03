@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/source/_static/logo.png" alt="py-oidc-auth logo" width="560">
+  <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/logo.png" alt="py-oidc-auth logo" width="560">
 </p>
 <p align="center">
 <em>A small, typed OpenID Connect helper for authentication and authorization.</em>
@@ -24,19 +24,19 @@ It porvides
   <tr>
     <td align="center" width="180">
       <a href="https://fastapi.tiangolo.com/" title="FastAPI">
-        <img src="docs/source/_static/fastapi-logo.png" alt="FastAPI" height="40">
+        <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/fastapi-logo.png" alt="FastAPI" height="40">
       </a><br>
       <sub>FastAPI</sub>
     </td>
     <td align="center" width="180">
       <a href="https://flask.palletsprojects.com/" title="Flask">
-        <img src="docs/source/_static/flask-logo.svg" alt="Flask" height="40">
+        <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/flask-logo.svg" alt="Flask" height="40">
       </a><br>
       <sub>Flask</sub>
     </td>
     <td align="center" width="180">
       <a href="https://quart.palletsprojects.com/" title="Quart">
-        <img src="docs/source/_static/quart-logo.png" alt="Quart" height="40">
+        <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/quart-logo.png" alt="Quart" height="40">
       </a><br>
       <sub>Quart</sub>
     </td>
@@ -44,19 +44,19 @@ It porvides
   <tr>
     <td align="center" width="180">
       <a href="https://www.tornadoweb.org/" title="Tornado">
-        <img src="docs/source/_static/tornado-logo.png" alt="Tornado" height="40">
+        <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/tornado-logo.png" alt="Tornado" height="40">
       </a><br>
       <sub>Tornado</sub>
     </td>
     <td align="center" width="180">
       <a href="https://litestar.dev/" title="Litestar">
-        <img src="docs/source/_static/litestar-logo.svg" alt="Litestar" height="40">
+        <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/litestar-logo.svg" alt="Litestar" height="40">
       </a><br>
       <sub>Litestar</sub>
     </td>
     <td align="center" width="180">
       <a href="https://www.djangoproject.com/" title="Django">
-        <img src="docs/source/_static/django-logo.svg" alt="Django" height="40">
+        <img src="https://raw.githubusercontent.com/freva-org/py-oidc-auth/main/docs/source/_static/django-logo.svg" alt="Django" height="40">
       </a><br>
       <sub>Django</sub>
     </td>
@@ -134,11 +134,10 @@ auth = ...(
 ### FastAPI
 
 ```python
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import FastAPI
-from py_oidc_auth import FastApiOIDCAuth
-from py_oidc_auth.schema import IDToken
+from py_oidc_auth import FastApiOIDCAuth, IDToken
 
 app = FastAPI()
 
@@ -152,18 +151,22 @@ auth = FastApiOIDCAuth(
 app.include_router(auth.create_auth_router(prefix="/api"))
 
 @app.get("/me")
-async def me(token: IDToken = auth.required()):
+async def me(token: IDToken = auth.required()) -> Dict[str, str]:
     return {"sub": token.sub}
 
 @app.get("/feed")
-async def feed(token: Optional[IDToken] = auth.optional()):
-    return {"authenticated": token is not None}
+async def feed(token: Optional[IDToken] = auth.optional()> Dict[str, str]:
+    if token is None:
+       message = "Welcome guest"
+    else:
+       message = "Welcome back, {token.given_name}"
+    return {"message": message}
 ```
 
 ### Flask
 
 ```python
-from flask import Flask
+from flask import Flask, Response, jsonify
 from py_oidc_auth import FlaskOIDCAuth
 
 app = Flask(__name__)
@@ -178,15 +181,15 @@ app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
 
 @app.get("/protected")
 @auth.required()
-def protected(token):
-    return {"sub": token.sub}
+def protected(token: IDToken) -> Response:
+    return jsonify({"sub": token.sub})
 ```
 
 ### Quart
 
 ```python
-from quart import Quart
-from py_oidc_auth import QuartOIDCAuth
+from quart import Quart, Response, jsonify
+from py_oidc_auth import QuartOIDCAuth, IDToken
 
 app = Quart(__name__)
 
@@ -200,8 +203,8 @@ app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
 
 @app.get("/protected")
 @auth.required()
-async def protected(token):
-    return {"sub": token.sub}
+async def protected(token: IDToken) -> Response:
+    return jsonify({"sub": token.sub})
 ```
 
 ### Django
@@ -209,9 +212,9 @@ async def protected(token):
 Decorator style:
 
 ```python
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.urls import path
-from py_oidc_auth import DjangoOIDCAuth
+from py_oidc_auth import DjangoOIDCAuth, IDToken
 
 auth = DjangoOIDCAuth(
     client_id="my client",
@@ -220,7 +223,7 @@ auth = DjangoOIDCAuth(
 )
 
 @auth.required()
-async def protected_view(request, token):
+async def protected_view(request: HttpRequest, token: IDToken) -> JsonResponse:
     return JsonResponse({"sub": token.sub})
 
 urlpatterns = [
@@ -240,8 +243,9 @@ urlpatterns = [
 ### Tornado
 
 ```python
+import json
 import tornado.web
-from py_oidc_auth import TornadoOIDCAuth
+from py_oidc_auth import TornadoOIDCAuth, IDToken
 
 auth = TornadoOIDCAuth(
     client_id="my client",
@@ -251,8 +255,8 @@ auth = TornadoOIDCAuth(
 
 class ProtectedHandler(tornado.web.RequestHandler):
     @auth.required()
-    async def get(self, token):
-        self.write({"sub": token.sub})
+    async def get(self, token: IDToken) -> None:
+        self.write(json.dumps({"sub": token.sub}))
 
 def make_app():
     return tornado.web.Application(
@@ -265,6 +269,7 @@ def make_app():
 ### Litestar
 
 ```python
+from typing import Dict
 from litestar import Litestar, get
 from py_oidc_auth import LitestarOIDCAuth
 
@@ -276,7 +281,7 @@ auth = LitestarOIDCAuth(
 
 @get("/protected")
 @auth.required()
-async def protected(token):
+async def protected(token: IDToken) -> Dict[str, str]:
     return {"sub": token.sub}
 
 app = Litestar(
@@ -294,11 +299,11 @@ All adapters support:
 * `scopes="a b c"` to require scopes on a protected endpoint
 * `claims={...}` to enforce simple claim constraints
 
-Example:
+FastApi Example:
 
 ```python
 @auth.required(scopes="admin", claims={"groups": ["admins"]})
-def admin(token):
+def admin(token: IDToken) -> Dict[str, str]:
     return {"sub": token.sub}
 ```
 

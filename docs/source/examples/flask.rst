@@ -35,17 +35,21 @@ The wrapped view receives the validated token as its first positional argument.
 
 .. code-block:: python
 
+   from typing import Optional
+   from flask import Flask, Response, jsonify
+   from py_oidc_auth import IDToken
+
    @app.get("/me")
    @auth.required()
-   def me(token):
-       return {"sub": token.sub}
+   def me(token: IDToken) -> Response:
+       return jsonify({"sub": token.sub})
 
    @app.get("/maybe_me")
    @auth.optional()
-   def maybe_me(token):
+   def maybe_me(token: Optional[IDToken]) -> Response:
        if token is None:
-           return {"anonymous": True}
-       return {"sub": token.sub}
+           return jsonify({"anonymous": True})
+       return jsonify({"sub": token.sub})
 
 Request examples
 ^^^^^^^^^^^^^^^^
