@@ -18,6 +18,10 @@
    :target: https://pypi.org/project/py-oidc-auth/
    :alt: PyPI version
 
+.. image:: https://img.shields.io/pypi/pyversions/py-oidc-auth
+   :target: https://pypi.org/project/py-oidc-auth/
+   :alt: Supported Python versions
+
 
 
 It provides
