@@ -4,6 +4,11 @@
 <p align="center">
 <em>A small, typed OpenID Connect helper for authentication and authorization.</em>
 </p>
+[![License](https://img.shields.io/badge/License-BSD-purple.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/freva-org/py-oidc-auth/graph/badge.svg?token=9JP9UWixaf)](https://codecov.io/gh/freva-org/py-oidc-auth)
+[![docs](https://readthedocs.org/projects/py-oidc-auth/badge/?version=latest)](https://metadata-crawler.readthedocs.io/en/latest/?badge=latest)
+
+
 
 It porvides
 
