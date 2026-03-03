@@ -158,7 +158,7 @@ async def lifespan(app: "FastAPI") -> AsyncIterator[None]:
     Things before yield are executed on startup. Things after on teardown.
     """
     logger.info(
-        "Visit http://localhost:%s/api/freva-nextgen/help",
+        "Visit http://localhost:%s/api/test/help",
         os.getenv("SERVER_PORT"),
     )
     yield
@@ -186,9 +186,9 @@ def _create_fastapi_app() -> "FastAPI":
         debug=True,
         title="Test Auth server",
         version=__version__,
-        openapi_url="/api/freva-nextgen/help/openapi.json",
+        openapi_url="/api/test/help/openapi.json",
         docs_url=None,
-        redoc_url="/api/freva-nextgen/help",
+        redoc_url="/api/test/help",
         description="Test auth server",
         lifespan=lifespan,
     )
@@ -198,7 +198,7 @@ def _create_fastapi_app() -> "FastAPI":
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
     )
-    app.include_router(auth.create_auth_router(prefix="/api/freva-nextgen"))
+    app.include_router(auth.create_auth_router(prefix="/api/test"))
     claims = string_to_dict(os.getenv("OIDC_ADMIN_CLAIM", ""))
 
     @app.get("/protected", tags=["Production"])
@@ -236,7 +236,7 @@ def _create_flask_app() -> Any:
     app = Flask("test")
 
     app.register_blueprint(
-        fl_auth.create_auth_blueprint(prefix="/api/freva-nextgen")
+        fl_auth.create_auth_blueprint(prefix="/api/test")
     )
 
     @app.get("/protected")
@@ -271,7 +271,7 @@ def _create_flask_app() -> Any:
         }
         return jsonify(spec)
 
-    @app.get("/api/freva-nextgen/help")
+    @app.get("/api/test/help")
     def redoc():
         html = """
 <!doctype html>
@@ -307,7 +307,7 @@ def _create_quart_app() -> Any:
 
     app = Quart("test")
     app.register_blueprint(
-        qt_auth.create_auth_blueprint(prefix="/api/freva-nextgen")
+        qt_auth.create_auth_blueprint(prefix="/api/test")
     )
 
     @app.get("/protected")
@@ -348,7 +348,7 @@ def _create_tornado_app() -> Any:
             )
 
     app = tornado.web.Application(
-        tn_auth.get_auth_routes(prefix="/api/freva-nextgen")
+        tn_auth.get_auth_routes(prefix="/api/test")
         + [(r"/protected", ProtectedHandler)]
     )
     return app
@@ -375,7 +375,7 @@ def _create_litestar_app() -> Any:
 
     app = Litestar(
         route_handlers=[
-            ls_auth.create_auth_router(prefix="/api/freva-nextgen"),
+            ls_auth.create_auth_router(prefix="/api/test"),
             protected,
         ]
     )
@@ -411,7 +411,7 @@ def _create_django_app() -> Any:
     urls_module = types.ModuleType("_dev_django_urls")
     urls_module.urlpatterns = [  # type: ignore[attr-defined]
         path(
-            "api/freva-nextgen/",
+            "api/test/",
             include(dj_auth.get_urlpatterns()),
         ),
         path("protected", protected),
