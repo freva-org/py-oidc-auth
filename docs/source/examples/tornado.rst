@@ -13,9 +13,10 @@ Minimal application
 
 .. code-block:: python
 
+   import json
    import tornado.web
    import tornado.ioloop
-   from py_oidc_auth import TornadoOIDCAuth
+   from py_oidc_auth import TornadoOIDCAuth, IDToken
 
    auth = TornadoOIDCAuth(
        client_id="my client",
@@ -26,8 +27,8 @@ Minimal application
 
    class MeHandler(tornado.web.RequestHandler):
        @auth.required()
-       async def get(self, token):
-           self.write({"sub": token.sub})
+       async def get(self, token: IDToken) -> None:
+           self.write(json.dumps({"sub": token.sub}))
 
    def make_app():
        return tornado.web.Application(

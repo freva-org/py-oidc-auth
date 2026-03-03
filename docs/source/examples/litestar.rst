@@ -13,8 +13,9 @@ Minimal application
 
 .. code-block:: python
 
+   from typing import Optional
    from litestar import Litestar, get
-   from py_oidc_auth import LitestarOIDCAuth
+   from py_oidc_auth import LitestarOIDCAuth, IDToken
 
    auth = LitestarOIDCAuth(
        client_id="my client",
@@ -24,7 +25,7 @@ Minimal application
    )
 
    @get("/me", dependencies={"token": auth.required()})
-   async def me(token):
+   async def me(token: IDToken) -> Dict[str, str]:
        return {"sub": token.sub}
 
    app = Litestar(route_handlers=[auth.create_auth_router(prefix=""), me])
