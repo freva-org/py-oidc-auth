@@ -67,7 +67,7 @@ napoleon_include_private_with_doc = False
 
 html_static_path = ["_static"]
 html_theme = "pydata_sphinx_theme"
-html_logo = os.path.join(html_static_path[0], "logo.png")
+html_logo = None
 templates_path = ["_templates"]
 html_favicon = os.path.join(html_static_path[0], "favicon.ico")
 html_theme_options = {
@@ -78,13 +78,17 @@ html_theme_options = {
             "icon": "fa-brands fa-github",
         }
     ],
+    "logo": {
+        "image_light": "_static/logo.png",
+        "image_dark": "_static/logo.png",
+        "text": "Py OpenID Connect Auth.",
+    },
     "navigation_with_keys": False,
     "show_toc_level": 4,
     "collapse_navigation": False,
     "navigation_depth": 4,
     "navbar_align": "left",
     "show_nav_level": 4,
-    "navigation_depth": 4,
     "navbar_center": ["navbar-nav"],
     "secondary_sidebar_items": ["page-toc"],
 }
@@ -104,15 +108,15 @@ html_meta = {
     "og:description": "Reusable OpenID Connect authentication library.",
     "og:type": "website",
     "og:url": "https://py-oidc-auth.readthedocs.io",
-    "og:image": "https://freva-org.github.io/freva-admin/_images/freva_flowchart-new.png",
+    "og:image": "https://py-oidc-auth.readthedocs.io/en/latest/_static/logo.png",
     "twitter:card": "summary_large_image",
     "twitter:title": "OpenID Connect Authentication made easy",
     "twitter:description": "Reusable OpenID Connect authentication library.",
-    "twitter:image": "https://freva-org.github.io/freva-admin/_images/freva_flowchart-new.png",
+    "twitter:image": "https://py-oidc-auth.readthedocs.io/en/latest/_static/logo.png",
 }
 
 ogp_site_url = "https://py-oidc-auth.readthedocs.io"
-opg_image = ("https://freva-org.github.io/freva-admin/_image",)
+opg_image = "https://py-oidc-auth.readthedocs.io/en/latest/_static/logo.png"
 ogp_type = "website"
 ogp_custom_meta_tags = [
     '<meta name="twitter:card" content="summary_large_image">',
