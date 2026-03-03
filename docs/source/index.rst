@@ -14,6 +14,9 @@
 .. image:: https://codecov.io/gh/freva-org/py-oidc-auth/graph/badge.svg?token=9JP9UWixaf
    :target: https://codecov.io/gh/freva-org/py-oidc-auth
 
+.. image:: https://img.shields.io/pypi/v/py-oidc-auth
+   :target: https://pypi.org/project/py-oidc-auth/
+   :alt: PyPI version
 
 
 
