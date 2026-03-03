@@ -31,9 +31,8 @@ jobs:
         name: Install flit
         run: python -m pip install flit
       -
-        name: Building freva-client 📦 with flit
+        name: Building package 📦 with flit
         run: flit build
-        working-directory: freva-client
 
       - name: Publish to PyPI
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
