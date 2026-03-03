@@ -334,3 +334,5 @@ Documentation
 
    examples/index
    api/index
+   whatsnew
+   code-of-conduct

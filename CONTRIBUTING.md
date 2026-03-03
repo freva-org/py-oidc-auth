@@ -19,7 +19,7 @@ Install tox with:
 python -m pip install tox
 ```
 
-## Development identity provider
+## Development identity provider (IDP)
 
 The development setup uses a Keycloak server as a local OpenID Provider.
 
@@ -40,6 +40,21 @@ Wait until the OIDC service is ready:
 ```console
 python dev-env/dev_utils.py oidc
 ```
+
+### IDP accounts
+The development IDP server ships with pre-defined mock accounts those are
+
+- uid: ``<YOUR-USER>``, password: ``secret``
+- uid: ``johndoe``, password: ``johndoe123``
+- uid: ``janedoe``, password: ``janedoe123``
+- uid: ``alicebrown``, password: ``alicebrown123``
+- uid: ``bobsmith``, password: ``bobsmith123``
+- uid: ``lisajones``, password: ``lisajones123``
+
+`<YOUR-USER>` is the user name that started the compose command.
+
+
+
 
 ## Development servers
 
@@ -72,6 +87,14 @@ positional arguments:
     gen-certs           Generate a random pair of public and private certificates.
     oidc                Wait for the oidc service to start up.
 ```
+
+After starting test server, the following endpoints will be available:
+
+- `/api/test/protected`: Enforcing mandatory tokens
+- `/api/test/optional`: Optional tokens
+- `/api/test/admin`: Enforcing mandatory tokens with admin claims.
+
+
 
 ## Testing, linting, and type checks
 
