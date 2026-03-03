@@ -10,7 +10,6 @@ on:
 jobs:
   pypi:
     name: Create Pip package
-    needs: [tests]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
