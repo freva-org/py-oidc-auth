@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/License-BSD-purple.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/freva-org/py-oidc-auth/graph/badge.svg?token=9JP9UWixaf)](https://codecov.io/gh/freva-org/py-oidc-auth)
-[![docs](https://readthedocs.org/projects/py-oidc-auth/badge/?version=latest)](https://metadata-crawler.readthedocs.io/en/latest/?badge=latest)
+[![docs](https://readthedocs.org/projects/py-oidc-auth/badge/?version=latest)](https://py-oidc-auth.readthedocs.io/en/latest/?badge=latest)
 
 It porvides
 

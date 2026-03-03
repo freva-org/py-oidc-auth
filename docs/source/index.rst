@@ -5,6 +5,18 @@
 
 .. centered:: *A small, typed OpenID Connect helper for authentication and authorization.*
 
+.. image:: https://img.shields.io/badge/License-BSD-purple.svg
+   :target: LICENSE
+
+.. image:: https://readthedocs.org/projects/py-oidc-auth/badge/?version=latest
+   :target: https://py-oidc-auth.readthedocs.io/en/latest/?badge=latest
+
+.. image:: https://codecov.io/gh/freva-org/py-oidc-auth/graph/badge.svg?token=9JP9UWixaf
+   :target: https://codecov.io/gh/freva-org/py-oidc-auth
+
+
+
+
 It provides
 
 * a framework independent async core: ``OIDCAuth``
