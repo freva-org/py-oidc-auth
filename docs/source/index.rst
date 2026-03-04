@@ -172,7 +172,7 @@ Create one auth instance at app startup:
 
         .. code-block:: python
 
-           from typing import Optional
+           from typing import Dict, Optional
 
            from fastapi import FastAPI
            from py_oidc_auth import FastApiOIDCAuth
@@ -190,11 +190,11 @@ Create one auth instance at app startup:
            app.include_router(auth.create_auth_router(prefix="/api"))
 
            @app.get("/me")
-           async def me(token: IDToken = auth.required()):
+           async def me(token: IDToken = auth.required()) -> Dict[str, str]:
                return {"sub": token.sub}
 
            @app.get("/feed")
-           async def feed(token: Optional[IDToken] = auth.optional()):
+           async def feed(token: Optional[IDToken] = auth.optional()) -> Dict[str, str]:
                return {"authenticated": token is not None}
 
 
