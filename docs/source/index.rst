@@ -166,169 +166,166 @@ Create one auth instance at app startup:
        scopes="openid profile email",
    )
 
-FastAPI
-^^^^^^^
+.. tab-set::
 
-.. code-block:: python
+    .. tab-item:: FastAPI
 
-   from typing import Optional
+        .. code-block:: python
 
-   from fastapi import FastAPI
-   from py_oidc_auth import FastApiOIDCAuth
-   from py_oidc_auth.schema import IDToken
+           from typing import Optional
 
-   app = FastAPI()
+           from fastapi import FastAPI
+           from py_oidc_auth import FastApiOIDCAuth
+           from py_oidc_auth.schema import IDToken
 
-   auth = FastApiOIDCAuth(
-       client_id="my client",
-       client_secret="secret",
-       discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-       scopes="openid profile email",
-   )
+           app = FastAPI()
 
-   app.include_router(auth.create_auth_router(prefix="/api"))
+           auth = FastApiOIDCAuth(
+               client_id="my client",
+               client_secret="secret",
+               discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+               scopes="openid profile email",
+           )
 
-   @app.get("/me")
-   async def me(token: IDToken = auth.required()):
-       return {"sub": token.sub}
+           app.include_router(auth.create_auth_router(prefix="/api"))
 
-   @app.get("/feed")
-   async def feed(token: Optional[IDToken] = auth.optional()):
-       return {"authenticated": token is not None}
+           @app.get("/me")
+           async def me(token: IDToken = auth.required()):
+               return {"sub": token.sub}
 
-Flask
-^^^^^
+           @app.get("/feed")
+           async def feed(token: Optional[IDToken] = auth.optional()):
+               return {"authenticated": token is not None}
 
-.. code-block:: python
 
-   from flask import Flask, Response, jsonify
-   from py_oidc_auth import FlaskOIDCAuth, IDToken
+    .. tab-item:: Flask
 
-   app = Flask(__name__)
+        .. code-block:: python
 
-   auth = FlaskOIDCAuth(
-       client_id="my client",
-       client_secret="secret",
-       discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-   )
+           from flask import Flask, Response, jsonify
+           from py_oidc_auth import FlaskOIDCAuth, IDToken
 
-   app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
+           app = Flask(__name__)
 
-   @app.get("/protected")
-   @auth.required()
-   def protected(token: IDToken) -> Response:
-       return jsonify({"sub": token.sub})
+           auth = FlaskOIDCAuth(
+               client_id="my client",
+               client_secret="secret",
+               discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+           )
 
-Quart
-^^^^^
+           app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
 
-.. code-block:: python
+           @app.get("/protected")
+           @auth.required()
+           def protected(token: IDToken) -> Response:
+               return jsonify({"sub": token.sub})
 
-   from quart import Quart, Response, jsonify
-   from py_oidc_auth import QuartOIDCAuth IDToken
+    .. tab-item:: Quart
 
-   app = Quart(__name__)
+        .. code-block:: python
 
-   auth = QuartOIDCAuth(
-       client_id="my client",
-       client_secret="secret",
-       discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-   )
+           from quart import Quart, Response, jsonify
+           from py_oidc_auth import QuartOIDCAuth IDToken
 
-   app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
+           app = Quart(__name__)
 
-   @app.get("/protected")
-   @auth.required()
-   async def protected(token: IDToken) -> Response:
-       return jsonify({"sub": token.sub})
+           auth = QuartOIDCAuth(
+               client_id="my client",
+               client_secret="secret",
+               discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+           )
 
-Django
-^^^^^^
+           app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
 
-Decorator style:
+           @app.get("/protected")
+           @auth.required()
+           async def protected(token: IDToken) -> Response:
+               return jsonify({"sub": token.sub})
 
-.. code-block:: python
+    .. tab-item:: Django
 
-   from django.http import HttpRequest, JsonResponse
-   from django.urls import path
-   from py_oidc_auth import DjangoOIDCAuth, IDToken
+        Decorator style:
 
-   auth = DjangoOIDCAuth(
-       client_id="my client",
-       client_secret="secret",
-       discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-   )
+        .. code-block:: python
 
-   @auth.required()
-   async def protected_view(request: HttpRequest, token: IDToken) -> JsonResponse:
-       return JsonResponse({"sub": token.sub})
+           from django.http import HttpRequest, JsonResponse
+           from django.urls import path
+           from py_oidc_auth import DjangoOIDCAuth, IDToken
 
-   urlpatterns = [
-       *auth.get_urlpatterns(prefix="api"),
-       path("protected/", protected_view),
-   ]
+           auth = DjangoOIDCAuth(
+               client_id="my client",
+               client_secret="secret",
+               discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+           )
 
-Routes only:
+           @auth.required()
+           async def protected_view(request: HttpRequest, token: IDToken) -> JsonResponse:
+               return JsonResponse({"sub": token.sub})
 
-.. code-block:: python
-
-   urlpatterns = [
-       *auth.get_urlpatterns(prefix="api"),
-   ]
-
-Tornado
-^^^^^^^
-
-.. code-block:: python
-
-   import json
-   import tornado.web
-   from py_oidc_auth import TornadoOIDCAuth, IDToken
-
-   auth = TornadoOIDCAuth(
-        client_id="my client",
-        client_secret="secret",
-        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-   )
-
-   class ProtectedHandler(tornado.web.RequestHandler):
-       @auth.required()
-       async def get(self, token: IDToken) -> None:
-           self.write(json.dumps({"sub": token.sub}))
-
-   def make_app():
-       return tornado.web.Application(
-           auth.get_handlers(prefix="/api") + [
-               (r"/protected", ProtectedHandler),
+           urlpatterns = [
+               \*auth.get_urlpatterns(prefix="api"),
+               path("protected/", protected_view),
            ]
-       )
 
-Litestar
-^^^^^^^^
+        Routes only:
 
-.. code-block:: python
+        .. code-block:: python
 
-   from typing import Dict
-   from litestar import Litestar, get
-   from py_oidc_auth import LitestarOIDCAuth
+           urlpatterns = [
+               \*auth.get_urlpatterns(prefix="api"),
+           ]
 
-   auth = LitestarOIDCAuth(
-        client_id="my client",
-        client_secret="secret",
-        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-   )
+    .. tab-item:: Tornado
 
-   @get("/protected")
-   @auth.required()
-   async def protected(token: IDToken) -> Dict[str, str]:
-       return {"sub": token.sub}
+        .. code-block:: python
 
-   app = Litestar(
-       route_handlers=[
-           protected,
-           *auth.get_route_handlers(prefix="/api"),
-       ]
-   )
+           import json
+           import tornado.web
+           from py_oidc_auth import TornadoOIDCAuth, IDToken
+
+           auth = TornadoOIDCAuth(
+                client_id="my client",
+                client_secret="secret",
+                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+           )
+
+           class ProtectedHandler(tornado.web.RequestHandler):
+               @auth.required()
+               async def get(self, token: IDToken) -> None:
+                   self.write(json.dumps({"sub": token.sub}))
+
+           def make_app():
+               return tornado.web.Application(
+                   auth.get_handlers(prefix="/api") + [
+                       (r"/protected", ProtectedHandler),
+                   ]
+               )
+
+    .. tab-item::
+
+        .. code-block:: python
+
+           from typing import Dict
+           from litestar import Litestar, get
+           from py_oidc_auth import LitestarOIDCAuth
+
+           auth = LitestarOIDCAuth(
+                client_id="my client",
+                client_secret="secret",
+                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+           )
+
+           @get("/protected")
+           @auth.required()
+           async def protected(token: IDToken) -> Dict[str, str]:
+               return {"sub": token.sub}
+
+           app = Litestar(
+               route_handlers=[
+                   protected,
+                   \*auth.get_route_handlers(prefix="/api"),
+               ]
+           )
 
 Scopes and claim constraints
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
