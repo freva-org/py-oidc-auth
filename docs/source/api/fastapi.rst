@@ -2,5 +2,5 @@ FastAPI API
 ===========
 
 .. automodule:: py_oidc_auth.fastapi_auth
-   :members:
+   :members: FastApiOIDCAuth
    :member-order: bysource

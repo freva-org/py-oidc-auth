@@ -61,6 +61,7 @@ class OIDCConfig:
     :param scopes: Default scopes.
     :param proxy: Public base URL of your application.
     :param claims: Optional claim constraints.
+    :param offline_access: If true, include ``offline_access`` in scope.
     :param timeout: HTTP timeout for outbound requests.
 
     The discovery document is fetched lazily when
@@ -85,6 +86,7 @@ class OIDCConfig:
     scopes: Optional[List[str]] = None
     proxy: str = ""
     claims: Optional[Dict[str, Any]] = None
+    offline_access: bool = True
     timeout: Optional[httpx.Timeout] = None
 
     def __post_init__(self) -> None:

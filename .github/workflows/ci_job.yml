@@ -4,8 +4,12 @@ permissions:
   pull-requests: write
   contents: write
   packages: write
-
-on: [push, pull_request, workflow_call]
+on:
+  push:
+    tags-ignore:
+      - "v*"
+  pull_request:
+  workflow_call:
 
 jobs:
   lint-and-docs:
@@ -33,7 +37,7 @@ jobs:
     strategy:
       max-parallel: 5
       matrix:
-        python-version: [3.9, "3.10", "3.11", "3.12", "3.13"]
+        python-version: [3.9, "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

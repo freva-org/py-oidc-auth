@@ -6,6 +6,7 @@ daphne, hypercorn).
 Requires the ``django`` extra::
 
     pip install py-oidc-auth[django]
+    conda install -c conda-forge py-oidc-auth-django
 
 Usage::
 
@@ -16,6 +17,7 @@ Usage::
     auth = DjangoOIDCAuth(
         client_id="my-client",
         discovery_url="https://kc.example.com/realms/myrealm/.well-known/openid-configuration",
+        scopes="myscope profile email",
     )
 
     @auth.required()

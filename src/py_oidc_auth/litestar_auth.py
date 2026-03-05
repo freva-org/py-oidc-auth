@@ -3,11 +3,10 @@
 Litestar is an async framework with dependency injection.
 This adapter integrates authentication using Litestar's :class:`litestar.di.Provide`.
 
-Install
-
-.. code-block:: text
+Install::
 
     pip install py-oidc-auth[litestar]
+    conda install -c conda-forge py-oidc-auth-litestar
 
 Usage
 
@@ -20,6 +19,7 @@ Usage
     auth = LitestarOIDCAuth(
         client_id="my client",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+        scopes="myscope profile email",
     )
 
     @get("/protected", dependencies={"token": auth.required()})

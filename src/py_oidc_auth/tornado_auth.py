@@ -3,11 +3,10 @@
 Tornado supports asyncio based request handlers.
 This adapter calls the async base implementation directly.
 
-Install
-
-.. code-block:: text
+Install::
 
     pip install py-oidc-auth[tornado]
+    conda install -c conda-forge py-oidc-auth-tornado
 
 Usage
 
@@ -20,6 +19,7 @@ Usage
     auth = TornadoOIDCAuth(
         client_id="my client",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+        scopes="myscope profile email",
     )
 
     class ProtectedHandler(tornado.web.RequestHandler):

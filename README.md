@@ -76,7 +76,7 @@ It porvides
 
 ## Install
 
-Pick your framework for installation:
+Pick your framework for installation with pip:
 
 ```console
 python -m pip install py-oidc-auth[fastapi]
@@ -85,6 +85,17 @@ python -m pip install py-oidc-auth[quart]
 python -m pip install py-oidc-auth[tornado]
 python -m pip install py-oidc-auth[litestar]
 python -m pip install py-oidc-auth[django]
+```
+
+Or use conda/mamba/micromamba:
+
+```console
+conda install -c conda-forge py-oidc-auth-fastapi
+conda install -c conda-forge py-oidc-auth-flask
+conda install -c conda-forge py-oidc-auth-quart
+conda install -c conda-forge py-oidc-auth-tornado
+conda install -c conda-forge py-oidc-auth-litestart
+conda install -c conda-forge py-oidc-auth-django
 ```
 
 Import name is `py_oidc_auth`:
@@ -127,7 +138,7 @@ auth = ...(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-    scopes="openid profile email",
+    scopes="myscope profile email",
 )
 ```
 
@@ -145,7 +156,7 @@ auth = FastApiOIDCAuth(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-    scopes="openid profile email",
+    scopes="myscope profile email",
 )
 
 app.include_router(auth.create_auth_router(prefix="/api"))
@@ -175,6 +186,7 @@ auth = FlaskOIDCAuth(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+    scopes="myscope profile email",
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -197,6 +209,7 @@ auth = QuartOIDCAuth(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+    scopes="myscope profile email",
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -220,6 +233,7 @@ auth = DjangoOIDCAuth(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+    scopes="myscope profile email",
 )
 
 @auth.required()
@@ -251,6 +265,7 @@ auth = TornadoOIDCAuth(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+    scopes="myscope profile email",
 )
 
 class ProtectedHandler(tornado.web.RequestHandler):
@@ -277,6 +292,7 @@ auth = LitestarOIDCAuth(
     client_id="my client",
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+    scopes="myscope profile email",
 )
 
 @get("/protected")

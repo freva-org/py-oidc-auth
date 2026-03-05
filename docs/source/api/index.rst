@@ -3,8 +3,13 @@ API reference
 
 This section documents the public Python API.
 
-If you build the docs without installing optional framework dependencies,
-configure autodoc mocking or install the extras in your docs environment.
+Core
+^^^^
+
+.. toctree::
+   :maxdepth: 2
+
+   core
 
 Framework integrations
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -18,11 +23,3 @@ Framework integrations
    django
    tornado
    litestar
-
-Core
-^^^^
-
-.. toctree::
-   :maxdepth: 2
-
-   core
