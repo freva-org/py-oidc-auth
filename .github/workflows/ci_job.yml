@@ -34,19 +34,20 @@ jobs:
 
   integration_tests:
     runs-on: ubuntu-latest
-    max-parallel: 5
-    matrix:
-      include:
-        - extra: fastapi
-          import: FastApiOIDCAuth
-        - extra: flask
-          import: FlaskOIDCAuth
-        - extra: quart
-          import: QuartOIDCAuth
-        - extra: litestar
-          import: LitestarOIDCAuth
-        - extra: django
-          import: DjangoOIDCAuth
+    strategy:
+      max-parallel: 5
+      matrix:
+        include:
+          - extra: fastapi
+            import: FastApiOIDCAuth
+          - extra: flask
+            import: FlaskOIDCAuth
+          - extra: quart
+            import: QuartOIDCAuth
+          - extra: litestar
+            import: LitestarOIDCAuth
+          - extra: django
+            import: DjangoOIDCAuth
     steps:
       - name: Checkout
         uses: actions/checkout@v4
