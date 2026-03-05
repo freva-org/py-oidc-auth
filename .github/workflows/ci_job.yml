@@ -32,6 +32,35 @@ jobs:
 
 
 
+  integration_tests:
+    runs-on: ubuntu-latest
+    max-parallel: 5
+    matrix:
+      include:
+        - extra: fastapi
+          import: FastApiOIDCAuth
+        - extra: flask
+          import: FlaskOIDCAuth
+        - extra: quart
+          import: QuartOIDCAuth
+        - extra: litestar
+          import: LitestarOIDCAuth
+        - extra: django
+          import: DjangoOIDCAuth
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          submodules: recursive
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+      - name: Install dependencies for ${{ matrix.extra }}
+        run: python3 -m pip install .[${{ matrix.extra }}] -c .github/dependabot/constraints.txt
+      - name: Verify import
+        run: python3 -c "from py_oidc_auth import ${{ matrix.import }}"
+
   tests:
     runs-on: ubuntu-latest
     strategy:
