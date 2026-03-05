@@ -197,6 +197,7 @@ def _create_fastapi_app() -> "FastAPI":
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
     )
     app.include_router(auth.create_auth_router(prefix="/api/test"))
     claims = string_to_dict(os.getenv("OIDC_ADMIN_CLAIM", ""))
@@ -231,6 +232,7 @@ def _create_flask_app() -> Any:
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
     )
 
     app = Flask("test")
@@ -301,6 +303,7 @@ def _create_quart_app() -> Any:
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
     )
 
     app = Quart("test")
@@ -328,6 +331,7 @@ def _create_tornado_app() -> Any:
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
     )
 
     class ProtectedHandler(tornado.web.RequestHandler):
@@ -360,6 +364,7 @@ def _create_litestar_app() -> Any:
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
     )
 
     @get("/protected", dependencies={"token": ls_auth.required()})
@@ -392,6 +397,7 @@ def _create_django_app() -> Any:
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
+        scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
     )
 
     from django.http import HttpRequest, JsonResponse
@@ -443,6 +449,9 @@ def set_env(namespace: argparse.Namespace) -> None:
         if namespace.client_secret:
             os.environ["OIDC_CLIENT_SECRET"] = namespace.client_secret
         os.environ["OIDC_ADMIN_CLAIM"] = namespace.admin_claim
+        os.environ["OIDC_SCOPES"] = " ".join(
+            namespace.scopes or ["openid", "profile" "email"]
+        )
         yield
     finally:
         os.environ = env
@@ -544,6 +553,13 @@ def add_server_parser(
     )
     parser.add_argument(
         "--client-secret", type=str, default=None, help="OIDC client secret"
+    )
+    parser.add_argument(
+        "--scopes",
+        type=str,
+        default="openid profile email",
+        help="OIDC scopes",
+        nargs="*",
     )
     return parser
 
