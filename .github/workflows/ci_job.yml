@@ -4,8 +4,12 @@ permissions:
   pull-requests: write
   contents: write
   packages: write
-
-on: [push, pull_request, workflow_call]
+on:
+  push:
+    tags-ignore:
+      - "v*"
+  pull_request:
+  workflow_call:
 
 jobs:
   lint-and-docs:
