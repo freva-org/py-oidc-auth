@@ -419,7 +419,7 @@ class OIDCAuth:
             Content-Length: 0
 
         """
-        scopes = self.config.scopes + ["openid"]
+        scopes = self.config.scopes or [] + ["openid"]
         scopes += ["offline_access"] if self.config.offline_access else []
         data: Dict[str, str] = {"scope": " ".join(set(scopes))}
         headers: Dict[str, str] = {}
