@@ -26,6 +26,7 @@ Quick start
         client_secret="secret",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
         scopes="openid profile email",
+        offline_access=True,
     )
 
     login_url = await auth.login(
@@ -114,6 +115,7 @@ class OIDCAuth:
     :param scopes: Default scopes as a space separated string.
     :param proxy: Public base URL of your application.
     :param claims: Optional claim constraints for token validation.
+    :param offline_access: If true, include ``offline_access`` in scope.
     :param timeout_sec: HTTP timeout for discovery and provider calls.
 
     Example
@@ -140,6 +142,7 @@ class OIDCAuth:
         scopes: str = "openid profile email",
         proxy: str = "",
         claims: Optional[Dict[str, Any]] = None,
+        offline_access: bool = True,
         timeout_sec: int = 10,
     ) -> None:
         self.config = OIDCConfig(
@@ -150,6 +153,7 @@ class OIDCAuth:
             proxy=proxy,
             claims=claims,
             timeout=httpx.Timeout(timeout_sec),
+            offline_access=offline_access,
         )
         self._verifier: Optional[TokenVerifier] = None
 
@@ -326,18 +330,17 @@ class OIDCAuth:
         )
         state = f"{secrets.token_urlsafe(16)}|{redirect_uri}|{code_verifier}"
         nonce = secrets.token_urlsafe(16)
-        offline_scope = ["offline_access"] if offline_access else []
         scopes_list = (
             [s.strip() for s in scope.split() if s.strip()]
             or self.config.scopes
             or []
         )
-        scopes_list += offline_scope
+        scopes_list += ["offline_access"] if offline_access else []
         query = {
             "response_type": "code",
             "client_id": self.config.client_id,
             "redirect_uri": redirect_uri,
-            "scope": " ".join(set(scopes_list)),
+            "scope": " ".join(set(scopes_list + ["openid"])),
             "state": state,
             "nonce": nonce,
             "prompt": prompt.replace("none", ""),
@@ -416,7 +419,9 @@ class OIDCAuth:
             Content-Length: 0
 
         """
-        data: Dict[str, str] = {"scope": "openid offline_access"}
+        scopes = self.config.scopes + ["openid"]
+        scopes += ["offline_access"] if self.config.offline_access else []
+        data: Dict[str, str] = {"scope": " ".join(set(scopes))}
         headers: Dict[str, str] = {}
         _set_request_header(
             self.config.client_id, self.config.client_secret, data, headers
@@ -501,7 +506,6 @@ class OIDCAuth:
         """
         data: Dict[str, str] = {}
         headers: Dict[str, str] = {}
-
         if code:
             data["redirect_uri"] = redirect_uri or urljoin(
                 self.config.proxy, endpoint
