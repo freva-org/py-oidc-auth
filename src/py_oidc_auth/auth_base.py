@@ -115,7 +115,8 @@ class OIDCAuth:
     :param scopes: Default scopes as a space separated string.
     :param proxy: Public base URL of your application.
     :param claims: Optional claim constraints for token validation.
-    :param offline_access: If true, include ``offline_access`` in scope.
+    :param offline_access: If true, include ``offline_access``
+                           in scope to request a `refresh token`.
     :param timeout_sec: HTTP timeout for discovery and provider calls.
 
     Example
@@ -126,8 +127,7 @@ class OIDCAuth:
             client_id="my client",
             discovery_url="https://idp.example.org/.well-known/openid-configuration",
             client_secret="secret",
-            scopes="openid profile email",
-            proxy="https://app.example.org",
+            scopes="myscope profile email",
         )
 
     """
@@ -139,7 +139,7 @@ class OIDCAuth:
         client_id: str = "",
         discovery_url: str = "",
         client_secret: Optional[str] = None,
-        scopes: str = "openid profile email",
+        scopes: str = "profile email",
         proxy: str = "",
         claims: Optional[Dict[str, Any]] = None,
         offline_access: bool = True,

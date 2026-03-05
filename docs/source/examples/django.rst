@@ -4,9 +4,12 @@ Django integration
 Install
 ^^^^^^^
 
-.. code-block:: text
+Install with pip or conda/mamba/micromamba
+
+.. code-block:: console
 
    pip install py-oidc-auth[django]
+   conda install -c conda-forge py-oidc-auth-django
 
 Wiring URL patterns
 ^^^^^^^^^^^^^^^^^^^
@@ -20,7 +23,7 @@ Wiring URL patterns
        client_id="my client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-       scopes="openid profile email",
+       scopes="myscope profile email",
    )
 
    urlpatterns = [

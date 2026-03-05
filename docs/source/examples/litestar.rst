@@ -4,9 +4,12 @@ Litestar integration
 Install
 ^^^^^^^
 
-.. code-block:: text
+Install with pip or conda/mamba/micromamba
+
+.. code-block:: console
 
    pip install py-oidc-auth[litestar]
+   conda install -c conda-forge py-oidc-auth-litestar
 
 Minimal application
 ^^^^^^^^^^^^^^^^^^^
@@ -21,7 +24,7 @@ Minimal application
        client_id="my client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-       scopes="openid profile email",
+       scopes="myscope profile email",
    )
 
    @get("/me", dependencies={"token": auth.required()})

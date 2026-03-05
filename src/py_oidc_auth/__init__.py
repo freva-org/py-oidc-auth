@@ -6,7 +6,7 @@ popular Python web frameworks.
 Framework adapters are imported lazily so that installing one extra does not
 pull in the dependencies for every framework.
 
-Install
+Install via pip
 
 .. code-block:: text
 
@@ -16,6 +16,18 @@ Install
     pip install py-oidc-auth[tornado]
     pip install py-oidc-auth[litestar]
     pip install py-oidc-auth[django]
+
+Install via conda/mamba/micromamba
+
+
+.. code-block:: text
+
+    conda install py-oidc-auth-fastapi
+    conda install py-oidc-auth-flast
+    conda install py-oidc-auth-quart
+    conda install py-oidc-auth-tornado
+    conda install py-oidc-auth-litestar
+    conda install py-oidc-auth-django
 
 Example with FastAPI
 

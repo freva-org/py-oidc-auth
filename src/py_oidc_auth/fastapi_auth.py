@@ -5,11 +5,10 @@ The :class:`~py_oidc_auth.fastapi_auth.FastApiOIDCAuth` class provides:
 * Dependencies for protected and optional routes
 * An :class:`fastapi.APIRouter` with standard authentication endpoints
 
-Install
-
-.. code-block:: text
+Install::
 
     pip install py-oidc-auth[fastapi]
+    conda install -c conda-forge py-oidc-fastapi
 
 Basic usage
 
@@ -24,7 +23,7 @@ Basic usage
         client_id="my client",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
         client_secret="secret",
-        scopes="openid profile email",
+        scopes="myscope profile email",
     )
 
     app.include_router(auth.create_auth_router(prefix="/api"))

@@ -4,11 +4,10 @@ Quart is an async framework with a Flask compatible API.
 Because Quart supports ``async def`` route handlers, this adapter calls the
 async base methods directly.
 
-Install
-
-.. code-block:: text
+Install::
 
     pip install py-oidc-auth[quart]
+    conda install -c conda-forge py-oidc-auth-quart
 
 Usage
 
@@ -21,6 +20,7 @@ Usage
         client_id="my client",
         client_secret="secret",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+        scopes="myscope profile email",
     )
 
     app = Quart(__name__)

@@ -4,11 +4,11 @@ Flask view functions are synchronous.
 The base implementation is async, so this adapter uses ``asyncio.run`` to call
 the async methods.
 
-Install
-
-.. code-block:: text
+Install::
 
     pip install py-oidc-auth[flask]
+    conda install -c conda-forge py-oidc-auth-flask
+
 
 Usage
 
@@ -21,6 +21,7 @@ Usage
         client_id="my client",
         client_secret="secret",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+        scopes="myscope profile email",
     )
 
     app = Flask(__name__)

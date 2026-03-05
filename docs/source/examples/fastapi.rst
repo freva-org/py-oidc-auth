@@ -4,9 +4,12 @@ FastAPI integration
 Install
 ^^^^^^^
 
-.. code-block:: text
+Install with pip or conda/mamba/micromamba
+
+.. code-block:: console
 
    pip install py-oidc-auth[fastapi]
+   conda install -c conda-forge py-oidc-auth-fastapi
 
 Minimal application
 ^^^^^^^^^^^^^^^^^^^
@@ -22,7 +25,7 @@ Minimal application
        client_id="my client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-       scopes="openid profile email",
+       scopes="myscope profile email",
    )
 
    app.include_router(auth.create_auth_router(prefix=""))

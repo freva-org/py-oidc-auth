@@ -106,7 +106,7 @@ Features
 Install
 ~~~~~~~
 
-Pick your framework for installation:
+Pick your framework for installation with pip:
 
 .. code-block:: console
 
@@ -116,6 +116,18 @@ Pick your framework for installation:
    python -m pip install py-oidc-auth[tornado]
    python -m pip install py-oidc-auth[litestar]
    python -m pip install py-oidc-auth[django]
+
+Or with conda/mamba/micromamba:
+
+.. code-block:: console
+
+   conda install -c conda-forge py-oidc-auth-fastapi
+   conda install -c conda-forge py-oidc-auth-flask
+   conda install -c conda-forge py-oidc-auth-quart
+   conda install -c conda-forge py-oidc-auth-tornado
+   conda install -c conda-forge py-oidc-auth-litestart
+   conda install -c conda-forge py-oidc-auth-django
+
 
 Import name is ``py_oidc_auth``:
 
@@ -163,7 +175,7 @@ Create one auth instance at app startup:
        client_id="my client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-       scopes="openid profile email",
+       scopes="myscope profile email",
    )
 
 .. tab-set::
@@ -184,7 +196,7 @@ Create one auth instance at app startup:
                client_id="my client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-               scopes="openid profile email",
+               scopes="myscope profile email",
            )
 
            app.include_router(auth.create_auth_router(prefix="/api"))
@@ -211,6 +223,7 @@ Create one auth instance at app startup:
                client_id="my client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+               scopes="myscope profile email",
            )
 
            app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -233,6 +246,7 @@ Create one auth instance at app startup:
                client_id="my client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+               scopes="myscope profile email",
            )
 
            app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -256,6 +270,7 @@ Create one auth instance at app startup:
                client_id="my client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+               scopes="myscope profile email",
            )
 
            @auth.required()
@@ -287,6 +302,7 @@ Create one auth instance at app startup:
                 client_id="my client",
                 client_secret="secret",
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+                scopes="myscope profile email",
            )
 
            class ProtectedHandler(tornado.web.RequestHandler):
@@ -313,6 +329,7 @@ Create one auth instance at app startup:
                 client_id="my client",
                 client_secret="secret",
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
+                scopes="myscope profile email",
            )
 
            @get("/protected")
