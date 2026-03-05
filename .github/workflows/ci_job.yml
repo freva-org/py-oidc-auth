@@ -30,8 +30,6 @@ jobs:
       - name: Linting, type checking and docs with tox
         run: tox -p 3 --parallel-no-spinner
 
-
-
   integration_tests:
     runs-on: ubuntu-latest
     strategy:
@@ -104,18 +102,24 @@ jobs:
     needs: [tests, lint-and-docs]
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.FREVA_BOT_APP_ID }}
+          private-key: ${{ secrets.FREVA_BOT_PRIVATE_KEY }}
       - name: Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v1
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          github-token: ${{ steps.app-token.outputs.token }}
       - name: Approve dependabot's PR
         run: gh pr review --approve "$PR_URL"
         env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GITHUB_TOKEN: ${{secrets.TOKEN}}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
       - name: Auto-merge for dependabot's PR
         run: gh pr merge --merge --auto "$PR_URL"
         env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GITHUB_TOKEN: ${{secrets.TOKEN}}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
