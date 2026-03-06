@@ -420,7 +420,7 @@ class FastApiOIDCAuth(OIDCAuth):
 
         if userinfo:
 
-            @router.get(userinfo, tags=["Authentication"])
+            @router.get(userinfo)
             async def _userinfo(
                 id_token: IDToken = Security(auth_dependency),
                 request: Request = Required,
