@@ -77,6 +77,7 @@ html_logo = None
 templates_path = ["_templates"]
 html_favicon = os.path.join(html_static_path[0], "favicon.ico")
 html_css_files = ["custom.css"]
+html_extra_path = ["_extra"]
 html_theme_options = {
     "icon_links": [
         {
