@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from .quart_auth import QuartOIDCAuth
     from .tornado_auth import TornadoOIDCAuth
 
-__version__ = "2603.0.0"
+__version__ = "2603.0.1"
 
 _LAZY_IMPORTS = {
     "FastApiOIDCAuth": ".fastapi_auth",

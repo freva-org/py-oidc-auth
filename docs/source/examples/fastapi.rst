@@ -16,19 +16,31 @@ Minimal application
 
 .. code-block:: python
 
+   from typing import Dict, List
+
    from fastapi import FastAPI
-   from py_oidc_auth import FastApiOIDCAuth
+   from py_oidc_auth import FastApiOIDCAuth, IDToken
 
    app = FastAPI()
 
    auth = FastApiOIDCAuth(
-       client_id="my client",
+       client_id="my-client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
        scopes="myscope profile email",
    )
 
-   app.include_router(auth.create_auth_router(prefix=""))
+   # Get the router — a standard FastAPI APIRouter
+   auth_router = auth.create_auth_router(prefix="/api")
+
+   # Add your own custom endpoints to the auth router
+   @auth_router.get("/auth/v2/auth-ports")
+   async def auth_ports() -> Dict[str, List[int]]:
+       """Expose valid redirect ports for client discovery."""
+       return {"valid_ports": [8080, 8443]}
+
+   # Include the router in the app
+   app.include_router(auth_router)
 
 Protecting routes
 ^^^^^^^^^^^^^^^^^
@@ -54,7 +66,7 @@ Use ``token=auth.required()`` or ``token=auth.optional()``.
 Standard auth endpoints
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-The router created by :meth:`py_oidc_auth.fastapi_auth.FastApiOIDCAuth.create_auth_router`
+The router created by :meth:`~py_oidc_auth.fastapi_auth.FastApiOIDCAuth.create_auth_router`
 exposes these endpoints by default:
 
 .. http:get:: /auth/v2/login
@@ -86,17 +98,17 @@ Request examples
 
 .. code-block:: text
 
-   GET /auth/v2/login?redirect_uri=https%3A%2F%2Fapp.example.org%2Fcallback HTTP/1.1
+   GET /api/auth/v2/login?redirect_uri=https%3A%2F%2Fapp.example.org%2Fcallback HTTP/1.1
    Host: app.example.org
 
 .. code-block:: text
 
-   GET /auth/v2/callback?code=abc&state=xyz HTTP/1.1
+   GET /api/auth/v2/callback?code=abc&state=xyz HTTP/1.1
    Host: app.example.org
 
 .. code-block:: text
 
-   POST /auth/v2/token HTTP/1.1
+   POST /api/auth/v2/token HTTP/1.1
    Host: app.example.org
    Content-Type: application/x-www-form-urlencoded
 

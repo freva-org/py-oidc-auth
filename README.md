@@ -11,13 +11,15 @@
 [![PyPI](https://img.shields.io/pypi/v/py-oidc-auth)](https://pypi.org/project/py-oidc-auth)
 [![Python Versions](https://img.shields.io/pypi/pyversions/py-oidc-auth)](https://pypi.org/project/py-oidc-auth/)
 
-It porvides
+It provides
 
 * a framework independent async core: `OIDCAuth`
 * framework adapters that expose common auth endpoints
 * simple `required()` and `optional()` helpers to protect routes
 
+## What it does
 
+`py-oidc-auth` adds OpenID Connect authentication to your Python web application. You create one auth instance at app startup, get a pre-built router (or blueprint / URL patterns), optionally add your own custom routes to it, and include it in your app. Protected routes use `required()` and `optional()` helpers.
 
 ## Supported frameworks
 <table align="center">
@@ -322,6 +324,11 @@ FastApi Example:
 def admin(token: IDToken) -> Dict[str, str]:
     return {"sub": token.sub}
 ```
+
+## Related
+
+* **[py-oidc-auth-client](https://pypi.org/project/py-oidc-auth-client/)** — typed Python client for authenticating against services that expose py-oidc-auth-compatible routes.
+
 
 ## Contributing
 See the [CONTRIBUTING.md](CONTRIBUTING.md) document to get involved.
