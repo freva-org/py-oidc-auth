@@ -125,7 +125,7 @@ Or with conda/mamba/micromamba:
    conda install -c conda-forge py-oidc-auth-flask
    conda install -c conda-forge py-oidc-auth-quart
    conda install -c conda-forge py-oidc-auth-tornado
-   conda install -c conda-forge py-oidc-auth-litestart
+   conda install -c conda-forge py-oidc-auth-litestar
    conda install -c conda-forge py-oidc-auth-django
 
 
@@ -149,7 +149,7 @@ Adapters
 
 Each adapter subclasses ``OIDCAuth`` and adds:
 
-* helpers to register the standard endpoints (router, blueprint, urlpatterns, etc.)
+* a method to create a router / blueprint / URL patterns with built-in auth endpoints
 * ``required()`` and ``optional()`` helpers to validate bearer tokens on protected routes
 
 Default endpoints
@@ -164,19 +164,19 @@ Adapters can expose these paths (customizable and individually disableable):
 * ``GET  /auth/v2/logout``
 * ``GET  /auth/v2/userinfo``
 
+Adding custom routes
+~~~~~~~~~~~~~~~~~~~~
+
+The router returned by the adapter is a **standard framework object**.
+You can add your own endpoints to it before including it in your app.
+This is useful for exposing application-specific auth metadata alongside the
+standard OIDC endpoints, for example valid redirect ports for client discovery.
+
 Quick start
 ~~~~~~~~~~~
 
-Create one auth instance at app startup:
-
-.. code-block:: python
-
-   auth = ...(
-       client_id="my client",
-       client_secret="secret",
-       discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
-       scopes="myscope profile email",
-   )
+Create one auth instance at app startup, get the router, optionally add
+custom routes to it, and include it in your app:
 
 .. tab-set::
 
@@ -184,22 +184,28 @@ Create one auth instance at app startup:
 
         .. code-block:: python
 
-           from typing import Dict, Optional
+           from typing import Dict, List, Optional
 
            from fastapi import FastAPI
-           from py_oidc_auth import FastApiOIDCAuth
-           from py_oidc_auth.schema import IDToken
+           from py_oidc_auth import FastApiOIDCAuth, IDToken
 
            app = FastAPI()
 
            auth = FastApiOIDCAuth(
-               client_id="my client",
+               client_id="my-client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
            )
 
-           app.include_router(auth.create_auth_router(prefix="/api"))
+           # Get the router and add custom endpoints
+           auth_router = auth.create_auth_router(prefix="/api")
+
+           @auth_router.get("/auth/v2/auth-ports")
+           async def auth_ports() -> Dict[str, List[int]]:
+               return {"valid_ports": [8080, 8443]}
+
+           app.include_router(auth_router)
 
            @app.get("/me")
            async def me(token: IDToken = auth.required()) -> Dict[str, str]:
@@ -220,13 +226,20 @@ Create one auth instance at app startup:
            app = Flask(__name__)
 
            auth = FlaskOIDCAuth(
-               client_id="my client",
+               client_id="my-client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
            )
 
-           app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
+           # Get the blueprint and add custom endpoints
+           auth_bp = auth.create_auth_blueprint(prefix="/api")
+
+           @auth_bp.route("/auth/v2/auth-ports")
+           def auth_ports() -> Response:
+               return jsonify({"valid_ports": [8080, 8443]})
+
+           app.register_blueprint(auth_bp)
 
            @app.get("/protected")
            @auth.required()
@@ -238,18 +251,25 @@ Create one auth instance at app startup:
         .. code-block:: python
 
            from quart import Quart, Response, jsonify
-           from py_oidc_auth import QuartOIDCAuth IDToken
+           from py_oidc_auth import QuartOIDCAuth, IDToken
 
            app = Quart(__name__)
 
            auth = QuartOIDCAuth(
-               client_id="my client",
+               client_id="my-client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
            )
 
-           app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
+           # Get the blueprint and add custom endpoints
+           auth_bp = auth.create_auth_blueprint(prefix="/api")
+
+           @auth_bp.route("/auth/v2/auth-ports")
+           async def auth_ports() -> Response:
+               return jsonify({"valid_ports": [8080, 8443]})
+
+           app.register_blueprint(auth_bp)
 
            @app.get("/protected")
            @auth.required()
@@ -258,8 +278,6 @@ Create one auth instance at app startup:
 
     .. tab-item:: Django
 
-        Decorator style:
-
         .. code-block:: python
 
            from django.http import HttpRequest, JsonResponse
@@ -267,27 +285,24 @@ Create one auth instance at app startup:
            from py_oidc_auth import DjangoOIDCAuth, IDToken
 
            auth = DjangoOIDCAuth(
-               client_id="my client",
+               client_id="my-client",
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
            )
+
+           # Custom endpoint alongside the standard OIDC routes
+           async def auth_ports(request: HttpRequest) -> JsonResponse:
+               return JsonResponse({"valid_ports": [8080, 8443]})
 
            @auth.required()
            async def protected_view(request: HttpRequest, token: IDToken) -> JsonResponse:
                return JsonResponse({"sub": token.sub})
 
            urlpatterns = [
-               \*auth.get_urlpatterns(prefix="api"),
+               \*auth.get_urlpatterns(),
+               path("auth/v2/auth-ports", auth_ports),
                path("protected/", protected_view),
-           ]
-
-        Routes only:
-
-        .. code-block:: python
-
-           urlpatterns = [
-               \*auth.get_urlpatterns(prefix="api"),
            ]
 
     .. tab-item:: Tornado
@@ -299,11 +314,16 @@ Create one auth instance at app startup:
            from py_oidc_auth import TornadoOIDCAuth, IDToken
 
            auth = TornadoOIDCAuth(
-                client_id="my client",
+                client_id="my-client",
                 client_secret="secret",
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                 scopes="myscope profile email",
            )
+
+           # Custom handler alongside the standard OIDC routes
+           class AuthPortsHandler(tornado.web.RequestHandler):
+               def get(self) -> None:
+                   self.write(json.dumps({"valid_ports": [8080, 8443]}))
 
            class ProtectedHandler(tornado.web.RequestHandler):
                @auth.required()
@@ -312,25 +332,31 @@ Create one auth instance at app startup:
 
            def make_app():
                return tornado.web.Application(
-                   auth.get_handlers(prefix="/api") + [
+                   [
+                       \*auth.get_auth_routes(prefix="/api"),
+                       (r"/api/auth/v2/auth-ports", AuthPortsHandler),
                        (r"/protected", ProtectedHandler),
                    ]
                )
 
-    .. tab-item::
+    .. tab-item:: Litestar
 
         .. code-block:: python
 
-           from typing import Dict
+           from typing import Dict, List
            from litestar import Litestar, get
-           from py_oidc_auth import LitestarOIDCAuth
+           from py_oidc_auth import LitestarOIDCAuth, IDToken
 
            auth = LitestarOIDCAuth(
-                client_id="my client",
+                client_id="my-client",
                 client_secret="secret",
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                 scopes="myscope profile email",
            )
+
+           @get("/auth/v2/auth-ports")
+           async def auth_ports() -> Dict[str, List[int]]:
+               return {"valid_ports": [8080, 8443]}
 
            @get("/protected")
            @auth.required()
@@ -339,13 +365,14 @@ Create one auth instance at app startup:
 
            app = Litestar(
                route_handlers=[
+                   auth.create_auth_router(prefix="/api"),
+                   auth_ports,
                    protected,
-                   \*auth.get_route_handlers(prefix="/api"),
                ]
            )
 
 Scopes and claim constraints
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All adapters support:
 

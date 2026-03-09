@@ -16,18 +16,25 @@ Wiring URL patterns
 
 .. code-block:: python
 
+   from django.http import HttpRequest, JsonResponse
    from django.urls import path
-   from py_oidc_auth import DjangoOIDCAuth
+   from py_oidc_auth import DjangoOIDCAuth, IDToken
 
    auth = DjangoOIDCAuth(
-       client_id="my client",
+       client_id="my-client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
        scopes="myscope profile email",
    )
 
+   # Custom endpoint alongside the standard OIDC routes
+   async def auth_ports(request: HttpRequest) -> JsonResponse:
+       """Expose valid redirect ports for client discovery."""
+       return JsonResponse({"valid_ports": [8080, 8443]})
+
    urlpatterns = [
-       *auth.get_urlpatterns(prefix=""),
+       *auth.get_urlpatterns(),
+       path("auth/v2/auth-ports", auth_ports),
    ]
 
 Protecting views

@@ -1,0 +1,128 @@
+# py-oidc-auth
+
+> A small, typed OpenID Connect helper for authentication and authorization in Python web frameworks.
+
+py-oidc-auth is a **server-side** library. It adds OIDC login, token exchange, bearer validation, and route protection to your web app. There is a companion **client-side** library called py-oidc-auth-client for desktop/CLI authentication against services that expose these routes.
+
+## Primary docs
+- /en/latest/index.html : landing page, install, and quick starts for all six frameworks
+- /en/latest/examples/fastapi.html : FastAPI integration guide
+- /en/latest/examples/flask.html : Flask integration guide
+- /en/latest/examples/quart.html : Quart integration guide
+- /en/latest/examples/django.html : Django integration guide
+- /en/latest/examples/tornado.html : Tornado integration guide
+- /en/latest/examples/litestar.html : Litestar integration guide
+- /en/latest/api/core.html : OIDCAuth (framework independent core) API reference
+- /en/latest/api/fastapi.html : FastApiOIDCAuth API reference
+- /en/latest/api/flask.html : FlaskOIDCAuth API reference
+- /en/latest/api/quart.html : QuartOIDCAuth API reference
+- /en/latest/api/django.html : DjangoOIDCAuth API reference
+- /en/latest/api/tornado.html : TornadoOIDCAuth API reference
+- /en/latest/api/litestar.html : LitestarOIDCAuth API reference
+- /en/latest/api/schema.html : IDToken, Token, DeviceStartResponse, UserInfo models
+- /en/latest/api/stable_public_api.html : supported public API surface
+
+## Supported frameworks
+FastAPI, Flask, Quart, Tornado, Litestar, Django
+
+## Install
+pip install py-oidc-auth[fastapi]   # or flask, quart, tornado, litestar, django
+conda install -c conda-forge py-oidc-auth-fastapi  # conda equivalents available
+
+## Key concepts
+
+### Core
+- OIDCAuth: framework independent async OIDC client; loads discovery document, validates tokens, handles all flows
+- It is the base class — you never instantiate it directly; use a framework adapter instead
+
+### Adapters (one per framework)
+- FastApiOIDCAuth, FlaskOIDCAuth, QuartOIDCAuth, TornadoOIDCAuth, LitestarOIDCAuth, DjangoOIDCAuth
+- Each adapter provides: create_auth_router() (or create_auth_blueprint / get_urlpatterns / get_auth_routes) plus required() and optional() helpers
+
+### Constructor parameters (same for all adapters)
+- client_id: str — OIDC client identifier
+- discovery_url: str — URL to the OIDC discovery document (.well-known/openid-configuration)
+- client_secret: str | None — client secret for confidential clients (None for public clients)
+- scopes: str — space-separated default scopes (e.g. "openid profile email")
+- proxy: str — public base URL of your app (used for redirect URI computation)
+- claims: dict | None — optional claim constraints for token validation
+- offline_access: bool — if True, include offline_access scope to request refresh tokens
+- timeout_sec: int — HTTP timeout for discovery and provider calls
+
+### Built-in endpoints (created by the router methods)
+- GET  /auth/v2/login — start authorization code flow with PKCE
+- GET  /auth/v2/callback — handle provider callback (code + state)
+- POST /auth/v2/token — exchange code, refresh token, or poll device code
+- POST /auth/v2/device — start device authorization flow
+- GET  /auth/v2/logout — redirect to provider end session endpoint
+- GET  /auth/v2/userinfo — fetch user profile using bearer token
+All paths are customisable and individually disableable by passing None.
+
+### Route protection
+- auth.required(scopes="...", claims={...}) — enforces authentication; returns IDToken or raises 401/403
+- auth.optional(scopes="...", claims={...}) — allows anonymous; returns IDToken or None
+
+### Data models (py_oidc_auth.schema)
+- IDToken: decoded JWT claims (sub, email, groups, preferred_username, etc.)
+- Token: token response (access_token, token_type, expires, refresh_token, refresh_expires, scope)
+- DeviceStartResponse: device flow start (device_code, user_code, verification_uri, expires_in)
+- UserInfo: normalised user profile (username, first_name, last_name, email)
+
+## Common pattern: adding custom routes to the auth router
+
+The router/blueprint returned by the adapter is a standard framework object.
+You can add your own endpoints to it before including it in your app.
+This is useful for exposing application-specific metadata alongside OIDC endpoints.
+
+### FastAPI
+```python
+auth_router = auth.create_auth_router(prefix="/api")
+
+@auth_router.get("/auth/v2/auth-ports")
+async def auth_ports():
+    return {"valid_ports": [8080, 8443]}
+
+app.include_router(auth_router)
+```
+
+### Flask / Quart
+```python
+auth_bp = auth.create_auth_blueprint(prefix="/api")
+
+@auth_bp.route("/auth/v2/auth-ports")
+def auth_ports():
+    return jsonify({"valid_ports": [8080, 8443]})
+
+app.register_blueprint(auth_bp)
+```
+
+### Django
+```python
+urlpatterns = [
+    *auth.get_urlpatterns(),
+    path("auth/v2/auth-ports", auth_ports_view),
+]
+```
+
+### Tornado
+```python
+routes = [
+    *auth.get_auth_routes(prefix="/api"),
+    (r"/api/auth/v2/auth-ports", AuthPortsHandler),
+]
+app = tornado.web.Application(routes)
+```
+
+### Litestar
+```python
+app = Litestar(route_handlers=[
+    auth.create_auth_router(prefix="/api"),
+    auth_ports_handler,
+])
+```
+
+## Relation to py-oidc-auth-client
+- py-oidc-auth is the **server** library (adds OIDC endpoints to your web app)
+- py-oidc-auth-client is the **client** library (authenticates users against those endpoints)
+- The client library provides: authenticate(), TokenStore, CodeFlow, DeviceFlow, Token
+- The client auto-discovers routes via the server's /auth/v2/* endpoints

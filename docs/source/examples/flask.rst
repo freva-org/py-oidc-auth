@@ -16,19 +16,29 @@ Minimal application
 
 .. code-block:: python
 
-   from flask import Flask
+   from flask import Flask, Response, jsonify
    from py_oidc_auth import FlaskOIDCAuth
 
    app = Flask(__name__)
 
    auth = FlaskOIDCAuth(
-       client_id="my client",
+       client_id="my-client",
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
        scopes="myscope profile email",
    )
 
-   app.register_blueprint(auth.create_auth_blueprint(prefix=""))
+   # Get the blueprint — a standard Flask Blueprint
+   auth_bp = auth.create_auth_blueprint(prefix="/api")
+
+   # Add your own custom endpoints to the auth blueprint
+   @auth_bp.route("/auth/v2/auth-ports")
+   def auth_ports() -> Response:
+       """Expose valid redirect ports for client discovery."""
+       return jsonify({"valid_ports": [8080, 8443]})
+
+   # Register the blueprint in the app
+   app.register_blueprint(auth_bp)
 
 Protecting routes
 ^^^^^^^^^^^^^^^^^
@@ -59,12 +69,12 @@ Request examples
 
 .. code-block:: text
 
-   GET /auth/v2/login?redirect_uri=https%3A%2F%2Fapp.example.org%2Fcallback HTTP/1.1
+   GET /api/auth/v2/login?redirect_uri=https%3A%2F%2Fapp.example.org%2Fcallback HTTP/1.1
    Host: app.example.org
 
 .. code-block:: text
 
-   POST /auth/v2/token HTTP/1.1
+   POST /api/auth/v2/token HTTP/1.1
    Host: app.example.org
    Content-Type: application/x-www-form-urlencoded
 
