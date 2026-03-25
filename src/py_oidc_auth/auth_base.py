@@ -618,6 +618,6 @@ class OIDCAuth:
             Authorization: Bearer <access token>
 
         """
-        token_data = {k.lower(): str(v) for (k, v) in dict(id_token).items()}
+        token_data = {k.lower(): str(v) for (k, v) in dict(id_token).items() if v is not None}
         authorization = cast(str, process_payload(header, "authorization"))
         return await query_user(token_data, authorization, self.config)
