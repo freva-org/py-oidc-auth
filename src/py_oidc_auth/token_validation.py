@@ -173,7 +173,7 @@ class TokenVerifier:
             options={
                 "verify_exp": True,
                 "verify_iss": True,
-                "verify_aud": True,
+                "verify_aud": False,
                 "verify_nbf": True,
             },
         )
