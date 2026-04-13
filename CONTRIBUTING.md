@@ -38,7 +38,7 @@ docker compose -f dev-env/docker-compose.yaml up -d
 Wait until the OIDC service is ready:
 
 ```console
-python dev-env/dev_utils.py oidc
+python dev-env/dev_utils.py oidc http://localhost:8080/realms/freva/.well-known/openid-configuration
 ```
 
 ### IDP accounts
@@ -65,7 +65,10 @@ Example (FastAPI):
 
 ```console
 python -m pip install -e .[fastapi]
-python dev-env/dev_utils.py fastapi-server
+python dev-env/dev_utils.py fastapi-server \
+  --discovery-url http://localhost:8080/realms/freva/.well-known/openid-configuration \
+  --client-id freva \
+  --client-secret mysecret
 ```
 
 The utility shows all available commands:

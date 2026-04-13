@@ -101,6 +101,10 @@ class TokenVerifier:
     :param algorithms: Accepted signing algorithms.
     :param jwks_ttl: Cache time to live for the JWKS.
     :param timeout: HTTP timeout for fetching keys.
+    :param verify_exp: Whether to verify the expiry claim. Default ``True``.
+    :param verify_iss: Whether to verify the issuer claim. Default ``True``.
+    :param verify_aud: Whether to verify the audience claim. Default ``True``.
+    :param verify_nbf: Whether to verify the not-before claim. Default ``True``.
 
     Example
     -------
@@ -132,11 +136,19 @@ class TokenVerifier:
         algorithms: Sequence[str] = ("RS256",),
         jwks_ttl: int = _DEFAULT_JWKS_TTL,
         timeout: Optional[httpx.Timeout] = None,
+        verify_exp: bool = True,
+        verify_iss: bool = True,
+        verify_aud: bool = True,
+        verify_nbf: bool = True,
     ) -> None:
         self._jwks_cache = JWKSCache(jwks_uri, ttl=jwks_ttl, timeout=timeout)
         self._issuer = issuer
         self._audience = audience
         self._algorithms = list(algorithms)
+        self._verify_exp = verify_exp
+        self._verify_iss = verify_iss
+        self._verify_aud = verify_aud
+        self._verify_nbf = verify_nbf
 
     async def verify(self, token: str) -> IDToken:
         """Decode and validate a JWT.
@@ -171,10 +183,10 @@ class TokenVerifier:
             issuer=self._issuer,
             audience=self._audience,
             options={
-                "verify_exp": True,
-                "verify_iss": True,
-                "verify_aud": False,
-                "verify_nbf": True,
+                "verify_exp": self._verify_exp,
+                "verify_iss": self._verify_iss,
+                "verify_aud": self._verify_aud,
+                "verify_nbf": self._verify_nbf,
             },
         )
         return IDToken(**payload)

@@ -63,6 +63,10 @@ class OIDCConfig:
     :param claims: Optional claim constraints.
     :param offline_access: If true, include ``offline_access`` in scope.
     :param timeout: HTTP timeout for outbound requests.
+    :param verify_exp: Whether to verify the expiry claim. Default ``True``.
+    :param verify_iss: Whether to verify the issuer claim. Default ``True``.
+    :param verify_aud: Whether to verify the audience claim. Default ``True``.
+    :param verify_nbf: Whether to verify the not-before claim. Default ``True``.
 
     The discovery document is fetched lazily when
     :attr:`oidc_overview` is accessed.
@@ -88,6 +92,10 @@ class OIDCConfig:
     claims: Optional[Dict[str, Any]] = None
     offline_access: bool = True
     timeout: Optional[httpx.Timeout] = None
+    verify_exp: bool = True
+    verify_iss: bool = True
+    verify_aud: bool = True
+    verify_nbf: bool = True
 
     def __post_init__(self) -> None:
         """Post init."""
