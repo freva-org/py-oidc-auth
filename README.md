@@ -141,6 +141,7 @@ auth = ...(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 ```
 
@@ -159,6 +160,7 @@ auth = FastApiOIDCAuth(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 
 app.include_router(auth.create_auth_router(prefix="/api"))
@@ -189,6 +191,7 @@ auth = FlaskOIDCAuth(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -212,6 +215,7 @@ auth = QuartOIDCAuth(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -236,6 +240,7 @@ auth = DjangoOIDCAuth(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 
 @auth.required()
@@ -268,6 +273,7 @@ auth = TornadoOIDCAuth(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 
 class ProtectedHandler(tornado.web.RequestHandler):
@@ -295,6 +301,7 @@ auth = LitestarOIDCAuth(
     client_secret="secret",
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
+    audience="my-aud",
 )
 
 @get("/protected")
@@ -310,12 +317,13 @@ app = Litestar(
 )
 ```
 
-## Scopes and claim constraints
+## Scopes audience and claim constraints
 
 All adapters support:
 
 * `scopes="a b c"` to require scopes on a protected endpoint
 * `claims={...}` to enforce simple claim constraints
+* `audience=my-aud` to enforce intended audience check
 
 FastApi Example:
 

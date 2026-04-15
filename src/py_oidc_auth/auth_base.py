@@ -115,6 +115,7 @@ class OIDCAuth:
     :param scopes: Default scopes as a space separated string.
     :param proxy: Public base URL of your application.
     :param claims: Optional claim constraints for token validation.
+    :param audience: Optional audience constraints for token validation.
     :param offline_access: If true, include ``offline_access``
                            in scope to request a `refresh token`.
     :param timeout_sec: HTTP timeout for discovery and provider calls.
@@ -128,6 +129,7 @@ class OIDCAuth:
             discovery_url="https://idp.example.org/.well-known/openid-configuration",
             client_secret="secret",
             scopes="myscope profile email",
+            audience="my-aud",
         )
 
     """
@@ -140,6 +142,7 @@ class OIDCAuth:
         discovery_url: str = "",
         client_secret: Optional[str] = None,
         scopes: str = "profile email",
+        audience: Optional[str] = None,
         proxy: str = "",
         claims: Optional[Dict[str, Any]] = None,
         offline_access: bool = True,
@@ -152,6 +155,7 @@ class OIDCAuth:
             scopes=[s for s in scopes.split() if s.strip()],
             proxy=proxy,
             claims=claims,
+            audience=audience,
             timeout=httpx.Timeout(timeout_sec),
             offline_access=offline_access,
         )
@@ -173,8 +177,8 @@ class OIDCAuth:
             try:
                 self._verifier = TokenVerifier(
                     jwks_uri=cast(str, self.config.oidc_overview["jwks_uri"]),
-                    issuer=cast(str, self.config.oidc_overview["issuer"]),
-                    audience=self.config.client_id,
+                    issuer=cast(Optional[str], self.config.oidc_overview.get("issuer")),
+                    audience=self.config.audience,
                     timeout=self.config.timeout,
                 )
                 logger.info("OIDC initialized from %s", self.config.discovery_url)
@@ -322,18 +326,14 @@ class OIDCAuth:
         scope = scope or ""
         code_verifier = secrets.token_urlsafe(32)
         code_challenge = (
-            base64.urlsafe_b64encode(
-                hashlib.sha256(code_verifier.encode()).digest()
-            )
+            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
             .decode()
             .rstrip("=")
         )
         state = f"{secrets.token_urlsafe(16)}|{redirect_uri}|{code_verifier}"
         nonce = secrets.token_urlsafe(16)
         scopes_list = (
-            [s.strip() for s in scope.split() if s.strip()]
-            or self.config.scopes
-            or []
+            [s.strip() for s in scope.split() if s.strip()] or self.config.scopes or []
         )
         scopes_list += ["offline_access"] if offline_access else []
         query = {
@@ -348,7 +348,9 @@ class OIDCAuth:
             "code_challenge_method": "S256",
         }
         query = {k: v for k, v in query.items() if v}
-        return f"{self.config.oidc_overview['authorization_endpoint']}?{urlencode(query)}"
+        return (
+            f"{self.config.oidc_overview['authorization_endpoint']}?{urlencode(query)}"
+        )
 
     async def callback(
         self,
@@ -507,9 +509,7 @@ class OIDCAuth:
         data: Dict[str, str] = {}
         headers: Dict[str, str] = {}
         if code:
-            data["redirect_uri"] = redirect_uri or urljoin(
-                self.config.proxy, endpoint
-            )
+            data["redirect_uri"] = redirect_uri or urljoin(self.config.proxy, endpoint)
             data["grant_type"] = "authorization_code"
             data["code"] = code
             if code_verifier:
@@ -521,9 +521,7 @@ class OIDCAuth:
             data["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
             data["device_code"] = device_code
         else:
-            raise InvalidRequest(
-                400, detail="Missing (device) code or refresh_token"
-            )
+            raise InvalidRequest(400, detail="Missing (device) code or refresh_token")
 
         _set_request_header(
             self.config.client_id, self.config.client_secret, data, headers
@@ -589,14 +587,10 @@ class OIDCAuth:
                 params["post_logout_redirect_uri"] = post_logout_redirect_uri
             redirect_target = f"{end_session}?{urlencode(params)}"
         else:
-            logger.warning(
-                "OIDC provider does not advertise end_session_endpoint."
-            )
+            logger.warning("OIDC provider does not advertise end_session_endpoint.")
         return redirect_target
 
-    async def userinfo(
-        self, id_token: IDToken, header: Dict[str, Payload]
-    ) -> UserInfo:
+    async def userinfo(self, id_token: IDToken, header: Dict[str, Payload]) -> UserInfo:
         """Fetch user details using the userinfo endpoint.
 
         The method first tries to create :class:`~py_oidc_auth.schema.UserInfo`
@@ -618,6 +612,8 @@ class OIDCAuth:
             Authorization: Bearer <access token>
 
         """
-        token_data = {k.lower(): str(v) for (k, v) in dict(id_token).items() if v is not None}
+        token_data = {
+            k.lower(): str(v) for (k, v) in dict(id_token).items() if v is not None
+        }
         authorization = cast(str, process_payload(header, "authorization"))
         return await query_user(token_data, authorization, self.config)
