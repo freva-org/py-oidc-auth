@@ -115,7 +115,7 @@ class OIDCAuth:
     :param scopes: Default scopes as a space separated string.
     :param proxy: Public base URL of your application.
     :param claims: Optional claim constraints for token validation.
-    :param audience: Optional audience contraints for token validation.
+    :param audience: Optional audience constraints for token validation.
     :param offline_access: If true, include ``offline_access``
                            in scope to request a `refresh token`.
     :param timeout_sec: HTTP timeout for discovery and provider calls.
