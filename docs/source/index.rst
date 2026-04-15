@@ -196,6 +196,7 @@ custom routes to it, and include it in your app:
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
+               audience="my-aud",
            )
 
            # Get the router and add custom endpoints
@@ -230,6 +231,7 @@ custom routes to it, and include it in your app:
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
+               audience="my-aud",
            )
 
            # Get the blueprint and add custom endpoints
@@ -260,6 +262,7 @@ custom routes to it, and include it in your app:
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
+               audience="my-aud",
            )
 
            # Get the blueprint and add custom endpoints
@@ -289,6 +292,7 @@ custom routes to it, and include it in your app:
                client_secret="secret",
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
+               audience="my-aud",
            )
 
            # Custom endpoint alongside the standard OIDC routes
@@ -318,6 +322,7 @@ custom routes to it, and include it in your app:
                 client_secret="secret",
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                 scopes="myscope profile email",
+                audience="my-aud",
            )
 
            # Custom handler alongside the standard OIDC routes
@@ -352,6 +357,7 @@ custom routes to it, and include it in your app:
                 client_secret="secret",
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                 scopes="myscope profile email",
+                audience="my-aud",
            )
 
            @get("/auth/v2/auth-ports")
@@ -371,13 +377,14 @@ custom routes to it, and include it in your app:
                ]
            )
 
-Scopes and claim constraints
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Scopes audience and claim constraints
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All adapters support:
 
 * ``scopes="a b c"`` to require scopes on a protected endpoint
 * ``claims={...}`` to enforce simple claim constraints
+* ``audience=my-aud`` to enforce intended audience check
 
 FastAPI Example:
 

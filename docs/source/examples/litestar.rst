@@ -25,6 +25,7 @@ Minimal application
        client_secret="secret",
        discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
        scopes="myscope profile email",
+       audience="my-aud",
    )
 
    # Custom endpoint alongside the standard OIDC routes

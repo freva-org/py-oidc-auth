@@ -3,9 +3,14 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2604.0.0
+---------
+* explicitly set audience.
+
+
 v2603.0.2
 ---------
-* filter None token claims before userinfo mapping 
+* filter None token claims before userinfo mapping
 
 
 v2603.0.1

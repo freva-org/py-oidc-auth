@@ -127,15 +127,15 @@ class TokenVerifier:
     def __init__(
         self,
         jwks_uri: str,
-        issuer: str,
-        audience: str,
+        issuer: Optional[str],
+        audience: Optional[str],
         algorithms: Sequence[str] = ("RS256",),
         jwks_ttl: int = _DEFAULT_JWKS_TTL,
         timeout: Optional[httpx.Timeout] = None,
     ) -> None:
         self._jwks_cache = JWKSCache(jwks_uri, ttl=jwks_ttl, timeout=timeout)
-        self._issuer = issuer
-        self._audience = audience
+        self._issuer = issuer or None
+        self._audience = audience or None
         self._algorithms = list(algorithms)
 
     async def verify(self, token: str) -> IDToken:
@@ -172,8 +172,8 @@ class TokenVerifier:
             audience=self._audience,
             options={
                 "verify_exp": True,
-                "verify_iss": True,
-                "verify_aud": True,
+                "verify_iss": True if self._issuer else False,
+                "verify_aud": True if self._audience else False,
                 "verify_nbf": True,
             },
         )

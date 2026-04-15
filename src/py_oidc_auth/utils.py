@@ -84,6 +84,7 @@ class OIDCConfig:
     discovery_url: str = ""
     client_secret: Optional[str] = None
     scopes: Optional[List[str]] = None
+    audience: Optional[str] = None
     proxy: str = ""
     claims: Optional[Dict[str, Any]] = None
     offline_access: bool = True
@@ -171,9 +172,7 @@ def string_to_dict(string: str) -> Dict[str, List[str]]:
     return result
 
 
-def token_field_matches(
-    token: str, claims: Optional[Dict[str, Any]] = None
-) -> bool:
+def token_field_matches(token: str, claims: Optional[Dict[str, Any]] = None) -> bool:
     """Check claim constraints against an encoded JWT.
 
     The function decodes the JWT without verifying the signature and checks
@@ -212,9 +211,7 @@ def token_field_matches(
             token_data = jwt.decode(token, options={"verify_signature": False})
         value_str = str(_walk_dict(token_data, claim.split(".")))
         for p in pattern:
-            matches.append(
-                bool(re.search(rf"\b{re.escape(str(p))}\b", value_str))
-            )
+            matches.append(bool(re.search(rf"\b{re.escape(str(p))}\b", value_str)))
     return all(matches)
 
 
@@ -338,9 +335,7 @@ async def query_user(
         )
         try:
             return UserInfo(
-                **get_userinfo(
-                    {k.lower(): str(v) for (k, v) in token_data.items()}
-                )
+                **get_userinfo({k.lower(): str(v) for (k, v) in token_data.items()})
             )
         except ValidationError:
             raise InvalidRequest(status_code=404)
