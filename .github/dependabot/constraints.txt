@@ -1,5 +1,5 @@
 httpx==0.28.1
-pydantic==2.12.5
+pydantic==2.13.1
 PyJWT==2.12.1
 typing_extensions==4.15.0
 python-multipart==0.0.24
