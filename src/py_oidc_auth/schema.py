@@ -63,8 +63,6 @@ class IDToken(BaseModel):
     @property
     def flattened_roles(self) -> List[str]:
         """Flat list of roles from any standard location."""
-        # Roles we mint explicitly into the freva JWT
-        extra_roles = (self.model_extra or {}).get("roles") or []
         # Roles from Keycloak realm_access
         realm_roles = (self.realm_access or {}).get("roles") or []
         # Groups from Keycloak
@@ -76,7 +74,7 @@ class IDToken(BaseModel):
         groups = self.groups or []
         roles = self.roles or []
 
-        return list({*extra_roles, *realm_roles, *groups, *roles, *resource_roles})
+        return list({*realm_roles, *groups, *roles, *resource_roles})
 
     @classmethod
     def from_token(
