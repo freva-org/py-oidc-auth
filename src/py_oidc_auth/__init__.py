@@ -52,7 +52,7 @@ Example with Flask
 from typing import TYPE_CHECKING, Any
 
 from .auth_base import OIDCAuth
-from .schema import IDToken
+from .schema import IDToken, Token
 from .utils import string_to_dict
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from .quart_auth import QuartOIDCAuth
     from .tornado_auth import TornadoOIDCAuth
 
-__version__ = "2604.0.0"
+__version__ = "2604.1.0"
 
 _LAZY_IMPORTS = {
     "FastApiOIDCAuth": ".fastapi_auth",
@@ -105,6 +105,7 @@ __all__ = [
     "OIDCAuth",
     "QuartOIDCAuth",
     "TornadoOIDCAuth",
+    "Token",
     "string_to_dict",
     "__version__",
 ]

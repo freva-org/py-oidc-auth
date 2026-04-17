@@ -13,12 +13,10 @@ adapter.
 """
 
 import logging
-import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, Iterable, List, Optional, Union, cast
 
 import httpx
-import jwt
 from pydantic import ValidationError
 from typing_extensions import NotRequired, TypedDict
 
@@ -172,7 +170,10 @@ def string_to_dict(string: str) -> Dict[str, List[str]]:
     return result
 
 
-def token_field_matches(token: str, claims: Optional[Dict[str, Any]] = None) -> bool:
+def token_field_matches(
+    token: str,
+    claims: Optional[Union[str, Iterable[str], Dict[str, Iterable[str]]]] = None,
+) -> bool:
     """Check claim constraints against an encoded JWT.
 
     The function decodes the JWT without verifying the signature and checks
@@ -191,28 +192,16 @@ def token_field_matches(token: str, claims: Optional[Dict[str, Any]] = None) -> 
 
         ok = token_field_matches(
             token,
-            claims={
-                "groups": ["admins"],
-                "realm_access.roles": ["offline_access"],
-            },
+            claims=["admins", "offline_access"]
         )
 
     """
-
-    def _walk_dict(inp: Any, keys: List[str]) -> Any:
-        if not keys or not isinstance(inp, dict) or not inp:
-            return inp or ""
-        return _walk_dict(inp.get(keys[0]), keys[1:])
-
-    matches: List[bool] = []
-    token_data: Dict[str, Any] = {}
-    for claim, pattern in (claims or {}).items():
-        if not token_data:
-            token_data = jwt.decode(token, options={"verify_signature": False})
-        value_str = str(_walk_dict(token_data, claim.split(".")))
-        for p in pattern:
-            matches.append(bool(re.search(rf"\b{re.escape(str(p))}\b", value_str)))
-    return all(matches)
+    claims = [claims] if (isinstance(claims, str) and claims) else claims or []
+    claims_list: List[str] = []
+    for c in claims.values() if isinstance(claims, dict) else map(str, claims):
+        claims_list += [c] if isinstance(c, str) else list(map(str, c))
+    roles = IDToken.from_token(token).flattened_roles
+    return all(c in roles for c in claims_list)
 
 
 def get_userinfo(user_info: Dict[str, str]) -> SystemUserInfo:

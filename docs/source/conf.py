@@ -8,7 +8,41 @@
 import os
 from datetime import date
 
+import json
+import pathlib
 from py_oidc_auth import __version__
+
+
+import requests
+
+
+def _get_rtd_versions() -> list:
+    """Fetch active versions from the ReadTheDocs API."""
+    try:
+        resp = requests.get(
+            "https://readthedocs.org/api/v3/projects/py-oidc-auth/versions/",
+            params={"active": True, "limit": 50},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        versions = []
+        for v in resp.json().get("results", []):
+            slug = v["slug"]
+            versions.append(
+                {
+                    "name": slug,
+                    "version": slug,
+                    "url": f"https://py-oidc-auth.readthedocs.io/en/{slug}/",
+                }
+            )
+        return versions
+    except Exception:
+        return []  # fail silently so builds don't break offline
+
+
+# Write switcher.json into _static at build time
+_switcher_path = pathlib.Path(__file__).parent / "_static" / "switcher.json"
+_switcher_path.write_text(json.dumps(_get_rtd_versions(), indent=2))
 
 project = "py-oidc-auth"
 author = "DKRZ"
@@ -91,6 +125,11 @@ html_theme_options = {
         "image_dark": "_static/logo.png",
         "text": "Py OpenID Connect Auth.",
     },
+    "switcher": {
+        "json_url": "https://py-oidc-auth.readthedocs.io/en/stable/_static/switcher.json",
+        "version_match": release,
+    },
+    "navbar_end": ["version-switcher", "navbar-icon-links"],
     "navigation_with_keys": False,
     "show_toc_level": 4,
     "collapse_navigation": False,

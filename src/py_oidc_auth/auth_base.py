@@ -119,6 +119,10 @@ class OIDCAuth:
     :param offline_access: If true, include ``offline_access``
                            in scope to request a `refresh token`.
     :param timeout_sec: HTTP timeout for discovery and provider calls.
+    :param jwks_uri: Use this jwks uri instead of the one provided by the
+                     discovery-url
+    :param issuer: Use this issuer instead of the one provided by the
+                   disovery-url
 
     Example
     -------
@@ -134,8 +138,6 @@ class OIDCAuth:
 
     """
 
-    _lock = asyncio.Lock()
-
     def __init__(
         self,
         client_id: str = "",
@@ -147,7 +149,10 @@ class OIDCAuth:
         claims: Optional[Dict[str, Any]] = None,
         offline_access: bool = True,
         timeout_sec: int = 10,
+        jwks_uri: Optional[str] = None,
+        issuer: Optional[str] = None,
     ) -> None:
+        self._lock = asyncio.Lock()
         self.config = OIDCConfig(
             client_id,
             discovery_url=discovery_url,
@@ -159,6 +164,8 @@ class OIDCAuth:
             timeout=httpx.Timeout(timeout_sec),
             offline_access=offline_access,
         )
+        self._jwks_uri = jwks_uri
+        self._issuer = issuer
         self._verifier: Optional[TokenVerifier] = None
 
     async def _ensure_auth_initialized(self) -> None:
@@ -172,12 +179,18 @@ class OIDCAuth:
         """
         if self._verifier is not None or not self.config.discovery_url:
             return
-
         async with self._lock:
             try:
+                jwks_uri = cast(
+                    str, self._jwks_uri or self.config.oidc_overview["jwks_uri"]
+                )
+                issuer = cast(
+                    Optional[str],
+                    self._issuer or self.config.oidc_overview.get("issuer"),
+                )
                 self._verifier = TokenVerifier(
-                    jwks_uri=cast(str, self.config.oidc_overview["jwks_uri"]),
-                    issuer=cast(Optional[str], self.config.oidc_overview.get("issuer")),
+                    jwks_uri=jwks_uri,
+                    issuer=issuer,
                     audience=self.config.audience,
                     timeout=self.config.timeout,
                 )
@@ -219,7 +232,6 @@ class OIDCAuth:
                 status_code=502,
                 detail=f"OIDC endpoint '{endpoint_key}' not found in discovery.",
             )
-
         return await oidc_request(
             url,
             method,

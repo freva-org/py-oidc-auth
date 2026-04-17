@@ -10,6 +10,7 @@ All models are compatible with OpenAPI generation in supported frameworks.
 
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+import jwt as pyjwt
 from pydantic import BaseModel, ConfigDict, Field
 
 PayloadContent = Optional[Union[str, int, float, bool]]
@@ -57,6 +58,63 @@ class IDToken(BaseModel):
     groups: Optional[List[str]] = None
     realm_access: Optional[Dict[str, Any]] = None
     resource_access: Optional[Dict[str, Any]] = None
+    roles: Optional[List[str]] = None
+
+    @property
+    def flattened_roles(self) -> List[str]:
+        """Flat list of roles from any standard location."""
+        # Roles from Keycloak realm_access
+        realm_roles = (self.realm_access or {}).get("roles") or []
+        # Groups from Keycloak
+        resource_roles = [
+            r
+            for c in (self.resource_access or {}).values()
+            for r in c.get("roles") or []
+        ]
+        groups = self.groups or []
+        roles = self.roles or []
+
+        return list({*realm_roles, *groups, *roles, *resource_roles})
+
+    @classmethod
+    def from_token(
+        cls,
+        token: str,
+        algorithms: Optional[List[str]] = None,
+    ) -> "IDToken":
+        """Create an IDToken from an encoded JWT.
+
+        Decodes without signature verification when no key is provided.
+
+        :param token: Encoded JWT string.
+        :param key: Public key or secret for signature verification.
+        :param algorithms: Accepted algorithms, e.g. ``["RS256"]``.
+        :param audience: Expected ``aud`` claim.
+        :param issuer: Expected ``iss`` claim.
+        :returns: Populated IDToken instance.
+
+        Example
+        -------
+        .. code-block:: python
+
+            # No verification
+            token = IDToken.from_token(encoded)
+
+            # With full verification
+            token = IDToken.from_token(
+                encoded,
+                key=public_key,
+                algorithms=["RS256"],
+                audience="freva-api",
+            )
+        """
+        return cls(
+            **pyjwt.decode(
+                token,
+                options={"verify_signature": False},
+                algorithms=algorithms or ["RS256"],
+            )
+        )
 
 
 class Token(BaseModel):
