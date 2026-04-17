@@ -10,8 +10,8 @@ All models are compatible with OpenAPI generation in supported frameworks.
 
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
 import jwt as pyjwt
+from pydantic import BaseModel, ConfigDict, Field
 
 PayloadContent = Optional[Union[str, int, float, bool]]
 Payload = Optional[

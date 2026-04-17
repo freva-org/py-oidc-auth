@@ -14,7 +14,7 @@ adapter.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union, cast, Iterable
+from typing import Any, Dict, Iterable, List, Optional, Union, cast
 
 import httpx
 from pydantic import ValidationError
