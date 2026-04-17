@@ -119,8 +119,10 @@ class OIDCAuth:
     :param offline_access: If true, include ``offline_access``
                            in scope to request a `refresh token`.
     :param timeout_sec: HTTP timeout for discovery and provider calls.
-    :param jwks_url: Use this jwks url instead of the one provided by the
+    :param jwks_uri: Use this jwks uri instead of the one provided by the
                      discovery-url
+    :param issuer: Use this issuer instead of the one provided by the
+                   disovery-url
 
     Example
     -------

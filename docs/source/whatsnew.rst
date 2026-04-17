@@ -3,6 +3,11 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2604.1.0
+---------
+* enable overriding of `jwks_uri` and `issuer`.
+* improve claim checks by flattening various roles.
+
 v2604.0.0
 ---------
 * explicitly set audience.
