@@ -40,7 +40,6 @@ def _make_cfg() -> OIDCConfig:
 
 
 class TestQueryUser:
-
     @pytest.mark.asyncio
     async def test_direct_extraction(self) -> None:
         """Token data has all required fields — no fallback needed."""
@@ -106,7 +105,6 @@ class TestQueryUser:
 
 
 class TestGetUsername:
-
     @pytest.mark.asyncio
     async def test_none_user_returns_none(self) -> None:
         result = await get_username(None, {}, _make_cfg())
@@ -214,9 +212,7 @@ class TestMakeOidcRequest:
         }
         if CLIENT_SECRET:
             data["client_secret"] = CLIENT_SECRET
-        result = await oidc_auth.make_oidc_request(
-            "POST", "token_endpoint", data=data
-        )
+        result = await oidc_auth.make_oidc_request("POST", "token_endpoint", data=data)
         assert "access_token" in result
 
 
@@ -352,19 +348,18 @@ class TestMisc:
 class TestTokenFieldMatches:
     """Tests for token_field_matches."""
 
-    def test_no_claims_always_matches(self) -> None:
-        assert token_field_matches("anything", claims=None) is True
-        assert token_field_matches("anything", claims={}) is True
+    def test_no_claims_always_matches(self, access_token: str) -> None:
+        assert token_field_matches(access_token, claims=None) is True
+        assert token_field_matches(access_token, claims={}) is True
+        assert token_field_matches(access_token, claims=[]) is True
+        assert token_field_matches(access_token, claims="") is True
 
     def test_match_against_real_token(self, access_token: str) -> None:
         """Validate claims in a real Keycloak token."""
         # The test user's token should have aud containing the client_id
-        decoded = pyjwt.decode(access_token, options={"verify_signature": False})
-        # Use a claim we know exists
-        if "aud" in decoded:
-            aud = decoded["aud"]
-            if isinstance(aud, list):
-                assert token_field_matches(access_token, claims={"aud": [aud[0]]})
+        assert token_field_matches(
+            access_token, claims={"roles": "default-roles-freva"}
+        )
 
     def test_no_match_returns_false(self, access_token: str) -> None:
         assert (
@@ -379,9 +374,7 @@ class TestTokenFieldMatches:
         """Test dotted path walking into nested dicts."""
         payload = {"realm_access": {"roles": ["admin", "user"]}}
         token = pyjwt.encode(payload, "secret")
-        assert token_field_matches(
-            token, claims={"realm_access.roles": ["admin"]}
-        )
+        assert token_field_matches(token, claims={"realm_access.roles": ["admin"]})
         assert not token_field_matches(
             token, claims={"realm_access.roles": ["superuser"]}
         )

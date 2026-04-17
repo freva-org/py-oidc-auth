@@ -163,7 +163,6 @@ class TokenVerifier:
             raise pyjwt.InvalidTokenError(f"No matching key for kid={kid!r}")
 
         public_key = from_jwk(jwk_data)
-
         payload = pyjwt.decode(
             token,
             key=public_key,

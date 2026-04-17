@@ -52,7 +52,7 @@ Example with Flask
 from typing import TYPE_CHECKING, Any
 
 from .auth_base import OIDCAuth
-from .schema import IDToken
+from .schema import IDToken, Token
 from .utils import string_to_dict
 
 if TYPE_CHECKING:
@@ -105,6 +105,7 @@ __all__ = [
     "OIDCAuth",
     "QuartOIDCAuth",
     "TornadoOIDCAuth",
+    "Token",
     "string_to_dict",
     "__version__",
 ]
