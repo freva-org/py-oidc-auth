@@ -122,14 +122,10 @@ class RandomKeys:
         certificate = (
             x509.CertificateBuilder()
             .subject_name(
-                x509.Name(
-                    [x509.NameAttribute(NameOID.COMMON_NAME, self.common_name)]
-                )
+                x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, self.common_name)])
             )
             .issuer_name(
-                x509.Name(
-                    [x509.NameAttribute(NameOID.COMMON_NAME, self.common_name)]
-                )
+                x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, self.common_name)])
             )
             .public_key(self.private_key.public_key())
             .serial_number(x509.random_serial_number())
@@ -225,8 +221,6 @@ def _create_flask_app() -> Any:
     from py_oidc_auth import (
         FlaskOIDCAuth,
         IDToken,
-        __version__,
-        string_to_dict,
     )
 
     fl_auth = FlaskOIDCAuth(
@@ -335,7 +329,6 @@ def _create_tornado_app() -> Any:
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
-        broker_mode=True,
         broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE", "0"))),
     )
 
@@ -457,7 +450,7 @@ def set_env(namespace: argparse.Namespace) -> None:
             os.environ["OIDC_CLIENT_SECRET"] = namespace.client_secret
         os.environ["OIDC_ADMIN_CLAIM"] = namespace.admin_claim
         os.environ["OIDC_SCOPES"] = " ".join(
-            namespace.scopes or ["openid", "profile" "email"]
+            namespace.scopes or ["openid", "profileemail"]
         )
         os.environ["OIDC_BROKER_MODE"] = str(int(namespace.no_broker_mode is False))
         yield
@@ -556,9 +549,7 @@ def add_server_parser(
         default="http://localhost:8080/realms/freva/.well-known/openid-configuration",
         help="OIDC discovery endpoint",
     )
-    parser.add_argument(
-        "--client-id", type=str, default="freva", help="OIDC client id"
-    )
+    parser.add_argument("--client-id", type=str, default="freva", help="OIDC client id")
     parser.add_argument(
         "--client-secret", type=str, default=None, help="OIDC client secret"
     )
@@ -626,8 +617,7 @@ def cli() -> None:
         type=int,
         default=500,
         help=(
-            "The time out in s after which we should give up waiting for "
-            "the service."
+            "The time out in s after which we should give up waiting for the service."
         ),
     )
     oidc_parser.add_argument(
