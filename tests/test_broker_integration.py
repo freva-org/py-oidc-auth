@@ -22,7 +22,7 @@ import json
 import sys
 import time
 import types
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
@@ -52,14 +52,20 @@ def _make_broker_auth(framework_cls: type, audience: str = "test-api") -> Any:
 def _get_broker_jwt(auth: Any, sub: str = "testuser", roles: list = None) -> str:
     """Sync — only call from non-async test functions."""
     broker = asyncio.run(auth._ensure_broker_ready())
-    token, _ = broker.mint(sub=sub, email=f"{sub}@example.org", roles=roles or ["hpcuser"])
+    token, _ = broker.mint(
+        sub=sub, email=f"{sub}@example.org", roles=roles or ["hpcuser"]
+    )
     return token
 
 
-async def _get_broker_jwt_async(auth: Any, sub: str = "testuser", roles: list = None) -> str:
+async def _get_broker_jwt_async(
+    auth: Any, sub: str = "testuser", roles: list = None
+) -> str:
     """Async — use from @pytest.mark.asyncio tests."""
     broker = await auth._ensure_broker_ready()
-    token, _ = broker.mint(sub=sub, email=f"{sub}@example.org", roles=roles or ["hpcuser"])
+    token, _ = broker.mint(
+        sub=sub, email=f"{sub}@example.org", roles=roles or ["hpcuser"]
+    )
     return token
 
 
@@ -82,9 +88,7 @@ def _fake_idp_claims() -> IDToken:
 def _fake_idp_token() -> Token:
     now = int(time.time())
     return Token(
-        access_token=pyjwt.encode(
-            {"sub": "janedoe", "exp": now + 3600}, "secret"
-        ),
+        access_token=pyjwt.encode({"sub": "janedoe", "exp": now + 3600}, "secret"),
         token_type="Bearer",
         expires=now + 3600,
         refresh_token="idp-refresh",
@@ -118,7 +122,7 @@ class TestFastAPIBrokerIntegration:
         async def protected_bad_claims(
             token: IDToken = auth.required(
                 claims={"realm_access.roles": ["nonexistent"]}
-            )
+            ),
         ):
             return {"sub": token.sub}
 
@@ -130,7 +134,7 @@ class TestFastAPIBrokerIntegration:
         async def optional_claims(
             token: Optional[IDToken] = auth.optional(
                 claims={"realm_access.roles": ["nonexistent"]}
-            )
+            ),
         ):
             return {"authenticated": token is not None}
 
@@ -147,21 +151,41 @@ class TestFastAPIBrokerIntegration:
         client, auth = broker_client
         broker = asyncio.run(auth._ensure_broker_ready())
         jwt, _ = broker.mint(sub="u", email=None, roles=[], expiry_seconds=-1)
-        assert client.get("/protected", headers={"Authorization": f"Bearer {jwt}"}).status_code == 401
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 401
+        )
 
     def test_required_invalid_jwt(self, broker_client):
         client, auth = broker_client
-        assert client.get("/protected", headers={"Authorization": "Bearer garbage"}).status_code == 401
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": "Bearer garbage"}
+            ).status_code
+            == 401
+        )
 
     def test_required_claims_pass(self, broker_client):
         client, auth = broker_client
         jwt = _get_broker_jwt(auth, roles=["hpcuser"])
-        assert client.get("/protected", headers={"Authorization": f"Bearer {jwt}"}).status_code == 200
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 200
+        )
 
     def test_required_claims_fail(self, broker_client):
         client, auth = broker_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}).status_code == 403
+        assert (
+            client.get(
+                "/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 403
+        )
 
     def test_optional_valid_jwt(self, broker_client):
         client, auth = broker_client
@@ -178,16 +202,31 @@ class TestFastAPIBrokerIntegration:
         client, auth = broker_client
         broker = asyncio.run(auth._ensure_broker_ready())
         jwt, _ = broker.mint(sub="u", email=None, roles=[], expiry_seconds=-1)
-        assert client.get("/optional", headers={"Authorization": f"Bearer {jwt}"}).json()["authenticated"] is False
+        assert (
+            client.get("/optional", headers={"Authorization": f"Bearer {jwt}"}).json()[
+                "authenticated"
+            ]
+            is False
+        )
 
     def test_optional_invalid_jwt(self, broker_client):
         client, auth = broker_client
-        assert client.get("/optional", headers={"Authorization": "Bearer junk"}).json()["authenticated"] is False
+        assert (
+            client.get("/optional", headers={"Authorization": "Bearer junk"}).json()[
+                "authenticated"
+            ]
+            is False
+        )
 
     def test_optional_claims_fail_returns_unauthenticated(self, broker_client):
         client, auth = broker_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/optional-claims", headers={"Authorization": f"Bearer {jwt}"}).json()["authenticated"] is False
+        assert (
+            client.get(
+                "/optional-claims", headers={"Authorization": f"Bearer {jwt}"}
+            ).json()["authenticated"]
+            is False
+        )
 
     def test_jwks_endpoint(self, broker_client):
         client, auth = broker_client
@@ -197,8 +236,14 @@ class TestFastAPIBrokerIntegration:
 
     def test_broker_token_rfc8693_exchange(self, broker_client, mocker):
         client, auth = broker_client
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
-        mocker.patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe")
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
         res = client.post(
             "/api/auth/v2/token",
             data={
@@ -212,17 +257,30 @@ class TestFastAPIBrokerIntegration:
 
     def test_broker_token_refresh(self, broker_client, mocker):
         client, auth = broker_client
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
-        mocker.patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe")
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
         first = client.post(
             "/api/auth/v2/token",
-            data={"grant_type": GRANT_TYPE_TOKEN_EXCHANGE, "subject_token": "fake-idp-token"},
+            data={
+                "grant_type": GRANT_TYPE_TOKEN_EXCHANGE,
+                "subject_token": "fake-idp-token",
+            },
         )
         assert first.status_code == 200
         broker_jwt = first.json()["access_token"]
 
-        mocker.patch.object(auth, "token", new_callable=AsyncMock, return_value=_fake_idp_token())
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
+        mocker.patch.object(
+            auth, "token", new_callable=AsyncMock, return_value=_fake_idp_token()
+        )
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
         res = client.post("/api/auth/v2/token", data={"refresh-token": broker_jwt})
         assert res.status_code == 200
         assert "access_token" in res.json()
@@ -263,12 +321,22 @@ class TestFlaskBrokerIntegration:
         def optional_route(token: Optional[IDToken]):
             return jsonify({"authenticated": token is not None})
 
+        @app.get("/optional-claims")
+        @auth.optional(claims={"realm_access.roles": ["nonexistent"]})
+        def optional_claims(token: Optional[IDToken]):
+            return jsonify({"authenticated": token is not None})
+
         return app.test_client(), auth
 
     def test_required_valid_jwt(self, broker_flask_client):
         client, auth = broker_flask_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/protected", headers={"Authorization": f"Bearer {jwt}"}).status_code == 200
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 200
+        )
 
     def test_required_no_token(self, broker_flask_client):
         client, auth = broker_flask_client
@@ -278,21 +346,41 @@ class TestFlaskBrokerIntegration:
         client, auth = broker_flask_client
         broker = asyncio.run(auth._ensure_broker_ready())
         jwt, _ = broker.mint(sub="u", email=None, roles=[], expiry_seconds=-1)
-        assert client.get("/protected", headers={"Authorization": f"Bearer {jwt}"}).status_code == 401
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 401
+        )
 
     def test_required_invalid_jwt(self, broker_flask_client):
         client, auth = broker_flask_client
-        assert client.get("/protected", headers={"Authorization": "Bearer bad"}).status_code == 401
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": "Bearer bad"}
+            ).status_code
+            == 401
+        )
 
     def test_required_claims_fail(self, broker_flask_client):
         client, auth = broker_flask_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}).status_code == 403
+        assert (
+            client.get(
+                "/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 403
+        )
 
     def test_optional_valid_jwt(self, broker_flask_client):
         client, auth = broker_flask_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/optional", headers={"Authorization": f"Bearer {jwt}"}).get_json()["authenticated"] is True
+        assert (
+            client.get(
+                "/optional", headers={"Authorization": f"Bearer {jwt}"}
+            ).get_json()["authenticated"]
+            is True
+        )
 
     def test_optional_no_token(self, broker_flask_client):
         client, auth = broker_flask_client
@@ -302,11 +390,31 @@ class TestFlaskBrokerIntegration:
         client, auth = broker_flask_client
         broker = asyncio.run(auth._ensure_broker_ready())
         jwt, _ = broker.mint(sub="u", email=None, roles=[], expiry_seconds=-1)
-        assert client.get("/optional", headers={"Authorization": f"Bearer {jwt}"}).get_json()["authenticated"] is False
+        assert (
+            client.get(
+                "/optional", headers={"Authorization": f"Bearer {jwt}"}
+            ).get_json()["authenticated"]
+            is False
+        )
 
     def test_optional_invalid_jwt(self, broker_flask_client):
         client, auth = broker_flask_client
-        assert client.get("/optional", headers={"Authorization": "Bearer junk"}).get_json()["authenticated"] is False
+        assert (
+            client.get(
+                "/optional", headers={"Authorization": "Bearer junk"}
+            ).get_json()["authenticated"]
+            is False
+        )
+
+    def test_optional_claims_fail(self, broker_flask_client):
+        client, auth = broker_flask_client
+        jwt = _get_broker_jwt(auth)  # has roles=["hpcuser"], not "nonexistent"
+        assert (
+            client.get(
+                "/optional-claims", headers={"Authorization": f"Bearer {jwt}"}
+            ).get_json()["authenticated"]
+            is False
+        )
 
     def test_jwks_endpoint(self, broker_flask_client):
         client, auth = broker_flask_client
@@ -316,8 +424,14 @@ class TestFlaskBrokerIntegration:
 
     def test_broker_token_exchange(self, broker_flask_client, mocker):
         client, auth = broker_flask_client
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
-        mocker.patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe")
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
         res = client.post(
             "/api/auth/v2/token",
             data={
@@ -360,6 +474,11 @@ class TestQuartBrokerIntegration:
         async def optional_route(token: Optional[IDToken]):
             return jsonify({"authenticated": token is not None})
 
+        @app.get("/optional-claims")
+        @auth.optional(claims={"realm_access.roles": ["nonexistent"]})
+        async def optional_claims(token: Optional[IDToken]):
+            return jsonify({"authenticated": token is not None})
+
         return app, auth
 
     @pytest.mark.asyncio
@@ -367,7 +486,9 @@ class TestQuartBrokerIntegration:
         app, auth = broker_quart_app
         jwt = await _get_broker_jwt_async(auth)
         async with app.test_client() as client:
-            res = await client.get("/protected", headers={"Authorization": f"Bearer {jwt}"})
+            res = await client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            )
         assert res.status_code == 200
 
     @pytest.mark.asyncio
@@ -382,14 +503,18 @@ class TestQuartBrokerIntegration:
         app, auth = broker_quart_app
         jwt = await _get_expired_broker_jwt_async(auth)
         async with app.test_client() as client:
-            res = await client.get("/protected", headers={"Authorization": f"Bearer {jwt}"})
+            res = await client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            )
         assert res.status_code == 401
 
     @pytest.mark.asyncio
     async def test_required_invalid_jwt(self, broker_quart_app):
         app, auth = broker_quart_app
         async with app.test_client() as client:
-            res = await client.get("/protected", headers={"Authorization": "Bearer bad"})
+            res = await client.get(
+                "/protected", headers={"Authorization": "Bearer bad"}
+            )
         assert res.status_code == 401
 
     @pytest.mark.asyncio
@@ -397,7 +522,9 @@ class TestQuartBrokerIntegration:
         app, auth = broker_quart_app
         jwt = await _get_broker_jwt_async(auth)
         async with app.test_client() as client:
-            res = await client.get("/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"})
+            res = await client.get(
+                "/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}
+            )
         assert res.status_code == 403
 
     @pytest.mark.asyncio
@@ -405,7 +532,9 @@ class TestQuartBrokerIntegration:
         app, auth = broker_quart_app
         jwt = await _get_broker_jwt_async(auth)
         async with app.test_client() as client:
-            res = await client.get("/optional", headers={"Authorization": f"Bearer {jwt}"})
+            res = await client.get(
+                "/optional", headers={"Authorization": f"Bearer {jwt}"}
+            )
         assert (await res.get_json())["authenticated"] is True
 
     @pytest.mark.asyncio
@@ -420,14 +549,28 @@ class TestQuartBrokerIntegration:
         app, auth = broker_quart_app
         jwt = await _get_expired_broker_jwt_async(auth)
         async with app.test_client() as client:
-            res = await client.get("/optional", headers={"Authorization": f"Bearer {jwt}"})
+            res = await client.get(
+                "/optional", headers={"Authorization": f"Bearer {jwt}"}
+            )
         assert (await res.get_json())["authenticated"] is False
 
     @pytest.mark.asyncio
     async def test_optional_invalid_jwt(self, broker_quart_app):
         app, auth = broker_quart_app
         async with app.test_client() as client:
-            res = await client.get("/optional", headers={"Authorization": "Bearer junk"})
+            res = await client.get(
+                "/optional", headers={"Authorization": "Bearer junk"}
+            )
+        assert (await res.get_json())["authenticated"] is False
+
+    @pytest.mark.asyncio
+    async def test_optional_claims_fail(self, broker_quart_app):
+        app, auth = broker_quart_app
+        jwt = await _get_broker_jwt_async(auth)
+        async with app.test_client() as client:
+            res = await client.get(
+                "/optional-claims", headers={"Authorization": f"Bearer {jwt}"}
+            )
         assert (await res.get_json())["authenticated"] is False
 
     @pytest.mark.asyncio
@@ -441,8 +584,14 @@ class TestQuartBrokerIntegration:
     @pytest.mark.asyncio
     async def test_broker_token_exchange(self, broker_quart_app, mocker):
         app, auth = broker_quart_app
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
-        mocker.patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe")
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
         async with app.test_client() as client:
             res = await client.post(
                 "/api/auth/v2/token",
@@ -474,13 +623,26 @@ class TestLitestarBrokerIntegration:
         async def protected(token: IDToken) -> dict:
             return {"sub": token.sub}
 
-        @get("/protected-bad-claims",
-             dependencies={"token": auth.required(claims={"realm_access.roles": ["nonexistent"]})})
+        @get(
+            "/protected-bad-claims",
+            dependencies={
+                "token": auth.required(claims={"realm_access.roles": ["nonexistent"]})
+            },
+        )
         async def protected_bad_claims(token: IDToken) -> dict:
             return {"sub": token.sub}
 
         @get("/optional", dependencies={"token": auth.optional()})
         async def optional_route(token: Optional[IDToken]) -> dict:
+            return {"authenticated": token is not None}
+
+        @get(
+            "/optional-claims",
+            dependencies={
+                "token": auth.optional(claims={"realm_access.roles": ["nonexistent"]})
+            },
+        )
+        async def optional_claims(token: Optional[IDToken]) -> dict:
             return {"authenticated": token is not None}
 
         app = Litestar(
@@ -489,6 +651,7 @@ class TestLitestarBrokerIntegration:
                 protected,
                 protected_bad_claims,
                 optional_route,
+                optional_claims,
             ]
         )
         return LitestarTestClient(app=app, raise_server_exceptions=False), auth
@@ -496,7 +659,12 @@ class TestLitestarBrokerIntegration:
     def test_required_valid_jwt(self, broker_litestar_client):
         client, auth = broker_litestar_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/protected", headers={"Authorization": f"Bearer {jwt}"}).status_code == 200
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 200
+        )
 
     def test_required_no_token(self, broker_litestar_client):
         client, auth = broker_litestar_client
@@ -506,16 +674,28 @@ class TestLitestarBrokerIntegration:
         client, auth = broker_litestar_client
         broker = asyncio.run(auth._ensure_broker_ready())
         jwt, _ = broker.mint(sub="u", email=None, roles=[], expiry_seconds=-1)
-        assert client.get("/protected", headers={"Authorization": f"Bearer {jwt}"}).status_code == 401
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            ).status_code
+            == 401
+        )
 
     def test_required_invalid_jwt(self, broker_litestar_client):
         client, auth = broker_litestar_client
-        assert client.get("/protected", headers={"Authorization": "Bearer garbage"}).status_code == 401
+        assert (
+            client.get(
+                "/protected", headers={"Authorization": "Bearer garbage"}
+            ).status_code
+            == 401
+        )
 
     def test_required_claims_fail(self, broker_litestar_client):
         client, auth = broker_litestar_client
         jwt = _get_broker_jwt(auth)
-        assert client.get("/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}).status_code in (401, 403)
+        assert client.get(
+            "/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}
+        ).status_code in (401, 403)
 
     def test_optional_valid_jwt(self, broker_litestar_client):
         client, auth = broker_litestar_client
@@ -531,11 +711,31 @@ class TestLitestarBrokerIntegration:
         client, auth = broker_litestar_client
         broker = asyncio.run(auth._ensure_broker_ready())
         jwt, _ = broker.mint(sub="u", email=None, roles=[], expiry_seconds=-1)
-        assert client.get("/optional", headers={"Authorization": f"Bearer {jwt}"}).json()["authenticated"] is False
+        assert (
+            client.get("/optional", headers={"Authorization": f"Bearer {jwt}"}).json()[
+                "authenticated"
+            ]
+            is False
+        )
 
     def test_optional_invalid_jwt(self, broker_litestar_client):
         client, auth = broker_litestar_client
-        assert client.get("/optional", headers={"Authorization": "Bearer junk"}).json()["authenticated"] is False
+        assert (
+            client.get("/optional", headers={"Authorization": "Bearer junk"}).json()[
+                "authenticated"
+            ]
+            is False
+        )
+
+    def test_optional_claims_fail(self, broker_litestar_client):
+        client, auth = broker_litestar_client
+        jwt = _get_broker_jwt(auth)
+        assert (
+            client.get(
+                "/optional-claims", headers={"Authorization": f"Bearer {jwt}"}
+            ).json()["authenticated"]
+            is False
+        )
 
     def test_jwks_endpoint(self, broker_litestar_client):
         client, auth = broker_litestar_client
@@ -545,8 +745,14 @@ class TestLitestarBrokerIntegration:
 
     def test_broker_token_exchange(self, broker_litestar_client, mocker):
         client, auth = broker_litestar_client
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
-        mocker.patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe")
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
         res = client.post(
             "/api/auth/v2/token",
             data={
@@ -586,19 +792,33 @@ class TestDjangoBrokerIntegration:
             return JsonResponse({"sub": token.sub})
 
         @auth.required(claims={"realm_access.roles": ["nonexistent"]})
-        async def protected_bad_claims(request: HttpRequest, token: IDToken) -> JsonResponse:
+        async def protected_bad_claims(
+            request: HttpRequest, token: IDToken
+        ) -> JsonResponse:
             return JsonResponse({"sub": token.sub})
 
         @auth.optional()
-        async def optional_route(request: HttpRequest, token: Optional[IDToken]) -> JsonResponse:
+        async def optional_route(
+            request: HttpRequest, token: Optional[IDToken]
+        ) -> JsonResponse:
+            return JsonResponse({"authenticated": token is not None})
+
+        @auth.optional(claims={"realm_access.roles": ["nonexistent"]})
+        async def optional_bad_claims(
+            request: HttpRequest, token: Optional[IDToken]
+        ) -> JsonResponse:
             return JsonResponse({"authenticated": token is not None})
 
         from django.urls import path
+
         urls_module = types.ModuleType("_broker_django_urls")
         urls_module.urlpatterns = [  # type: ignore[attr-defined]
-            path("api/", __import__("django.urls", fromlist=["include"]).include(
-                auth.get_urlpatterns()
-            )),
+            path(
+                "api/",
+                __import__("django.urls", fromlist=["include"]).include(
+                    auth.get_urlpatterns()
+                ),
+            ),
             path("protected", protected),
             path("protected-bad-claims", protected_bad_claims),
             path("optional", optional_route),
@@ -617,14 +837,22 @@ class TestDjangoBrokerIntegration:
             settings.ROOT_URLCONF = "_broker_django_urls"
 
         from django.urls import clear_url_caches
+
         clear_url_caches()
 
-        return auth, protected, protected_bad_claims, optional_route
+        return (
+            auth,
+            protected,
+            protected_bad_claims,
+            optional_route,
+            optional_bad_claims,
+        )
 
     @staticmethod
     def _make_request(method: str = "GET", bearer: str = "") -> Any:
         """Build a Django HttpRequest with an Authorization header."""
         from django.test import RequestFactory
+
         factory = RequestFactory()
         kwargs = {}
         if bearer:
@@ -633,7 +861,7 @@ class TestDjangoBrokerIntegration:
 
     @pytest.mark.asyncio
     async def test_required_valid_jwt(self, broker_django_auth):
-        auth, protected, _, _ = broker_django_auth
+        auth, protected, _, _, _ = broker_django_auth
         jwt = await _get_broker_jwt_async(auth)
         res = await protected(self._make_request(bearer=jwt))
         assert res.status_code == 200
@@ -641,59 +869,67 @@ class TestDjangoBrokerIntegration:
 
     @pytest.mark.asyncio
     async def test_required_no_token(self, broker_django_auth):
-        _, protected, _, _ = broker_django_auth
+        _, protected, _, _, _ = broker_django_auth
         res = await protected(self._make_request())
         assert res.status_code == 401
 
     @pytest.mark.asyncio
     async def test_required_expired_jwt(self, broker_django_auth):
-        auth, protected, _, _ = broker_django_auth
+        auth, protected, _, _, _ = broker_django_auth
         jwt = await _get_expired_broker_jwt_async(auth)
         res = await protected(self._make_request(bearer=jwt))
         assert res.status_code == 401
 
     @pytest.mark.asyncio
     async def test_required_invalid_jwt(self, broker_django_auth):
-        _, protected, _, _ = broker_django_auth
+        _, protected, _, _, _ = broker_django_auth
         res = await protected(self._make_request(bearer="garbage"))
         assert res.status_code == 401
 
     @pytest.mark.asyncio
     async def test_required_claims_fail(self, broker_django_auth):
-        auth, _, bad_claims, _ = broker_django_auth
+        auth, _, bad_claims, _, _ = broker_django_auth
         jwt = await _get_broker_jwt_async(auth)
         res = await bad_claims(self._make_request(bearer=jwt))
         assert res.status_code == 403
 
     @pytest.mark.asyncio
     async def test_optional_valid_jwt(self, broker_django_auth):
-        auth, _, _, optional = broker_django_auth
+        auth, _, _, optional, _ = broker_django_auth
         jwt = await _get_broker_jwt_async(auth)
         res = await optional(self._make_request(bearer=jwt))
         assert json.loads(res.content)["authenticated"] is True
 
     @pytest.mark.asyncio
     async def test_optional_no_token(self, broker_django_auth):
-        _, _, _, optional = broker_django_auth
+        _, _, _, optional, _ = broker_django_auth
         res = await optional(self._make_request())
         assert json.loads(res.content)["authenticated"] is False
 
     @pytest.mark.asyncio
     async def test_optional_expired_jwt(self, broker_django_auth):
-        auth, _, _, optional = broker_django_auth
+        auth, _, _, optional, _ = broker_django_auth
         jwt = await _get_expired_broker_jwt_async(auth)
         res = await optional(self._make_request(bearer=jwt))
         assert json.loads(res.content)["authenticated"] is False
 
     @pytest.mark.asyncio
     async def test_optional_invalid_jwt(self, broker_django_auth):
-        _, _, _, optional = broker_django_auth
+        _, _, _, optional, _ = broker_django_auth
         res = await optional(self._make_request(bearer="junk"))
+        assert json.loads(res.content)["authenticated"] is False
+
+    @pytest.mark.asyncio
+    async def test_optional_claims_fail(self, broker_django_auth):
+        auth, _, _, _, optional_bad = broker_django_auth
+        jwt = await _get_broker_jwt_async(auth)
+        res = await optional_bad(self._make_request(bearer=jwt))
         assert json.loads(res.content)["authenticated"] is False
 
     @pytest.mark.asyncio
     async def test_jwks_endpoint(self, broker_django_auth):
         from django.test import AsyncClient
+
         res = await AsyncClient().get("/api/auth/v2/.well-known/jwks.json")
         assert res.status_code == 200
         assert "keys" in json.loads(res.content)
@@ -701,9 +937,16 @@ class TestDjangoBrokerIntegration:
     @pytest.mark.asyncio
     async def test_broker_token_exchange(self, broker_django_auth, mocker):
         from django.test import AsyncClient
-        auth, _, _, _ = broker_django_auth
-        mocker.patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims())
-        mocker.patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe")
+
+        auth, _, _, _, _ = broker_django_auth
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
         res = await AsyncClient().post(
             "/api/auth/v2/token",
             data={
@@ -747,12 +990,19 @@ class TestTornadoBrokerIntegration:
                 self.set_header("Content-Type", "application/json")
                 self.write(json.dumps({"authenticated": token is not None}))
 
+        class OptionalBadClaimsHandler(tornado.web.RequestHandler):
+            @auth.optional(claims={"realm_access.roles": ["nonexistent"]})
+            async def get(self, token: Optional[IDToken]) -> None:
+                self.set_header("Content-Type", "application/json")
+                self.write(json.dumps({"authenticated": token is not None}))
+
         app = tornado.web.Application(
             auth.get_auth_routes(prefix="/api")
             + [
                 (r"/protected", ProtectedHandler),
                 (r"/protected-bad-claims", ProtectedBadClaimsHandler),
                 (r"/optional", OptionalHandler),
+                (r"/optional-claims", OptionalBadClaimsHandler),
             ]
         )
         return app, auth
@@ -760,6 +1010,7 @@ class TestTornadoBrokerIntegration:
     async def _fetch(self, app: Any, path: str, *, headers: dict = None) -> Any:
         import tornado.httpserver
         import tornado.testing
+
         sock, port = tornado.testing.bind_unused_port()
         server = tornado.httpserver.HTTPServer(app)
         server.add_sockets([sock])
@@ -774,11 +1025,40 @@ class TestTornadoBrokerIntegration:
             server.stop()
         return res
 
+    async def _post(
+        self, app: Any, path: str, body: dict, *, headers: dict = None
+    ) -> Any:
+        import urllib.parse
+        import tornado.httpserver
+        import tornado.testing
+
+        sock, port = tornado.testing.bind_unused_port()
+        server = tornado.httpserver.HTTPServer(app)
+        server.add_sockets([sock])
+        client = tornado.testing.AsyncHTTPClient()
+        encoded = urllib.parse.urlencode(body).encode()
+        try:
+            res = await client.fetch(
+                f"http://localhost:{port}{path}",
+                method="POST",
+                body=encoded,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    **(headers or {}),
+                },
+                raise_error=False,
+            )
+        finally:
+            server.stop()
+        return res
+
     @pytest.mark.asyncio
     async def test_required_valid_jwt(self, broker_tornado_app):
         app, auth = broker_tornado_app
         jwt = await _get_broker_jwt_async(auth)
-        res = await self._fetch(app, "/protected", headers={"Authorization": f"Bearer {jwt}"})
+        res = await self._fetch(
+            app, "/protected", headers={"Authorization": f"Bearer {jwt}"}
+        )
         assert res.code == 200
 
     @pytest.mark.asyncio
@@ -790,41 +1070,85 @@ class TestTornadoBrokerIntegration:
     async def test_required_expired_jwt(self, broker_tornado_app):
         app, auth = broker_tornado_app
         jwt = await _get_expired_broker_jwt_async(auth)
-        assert (await self._fetch(app, "/protected", headers={"Authorization": f"Bearer {jwt}"})).code == 401
+        assert (
+            await self._fetch(
+                app, "/protected", headers={"Authorization": f"Bearer {jwt}"}
+            )
+        ).code == 401
 
     @pytest.mark.asyncio
     async def test_required_invalid_jwt(self, broker_tornado_app):
         app, auth = broker_tornado_app
-        assert (await self._fetch(app, "/protected", headers={"Authorization": "Bearer garbage"})).code == 401
+        assert (
+            await self._fetch(
+                app, "/protected", headers={"Authorization": "Bearer garbage"}
+            )
+        ).code == 401
 
     @pytest.mark.asyncio
     async def test_required_claims_fail(self, broker_tornado_app):
         app, auth = broker_tornado_app
         jwt = await _get_broker_jwt_async(auth)
-        assert (await self._fetch(app, "/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"})).code == 403
+        assert (
+            await self._fetch(
+                app, "/protected-bad-claims", headers={"Authorization": f"Bearer {jwt}"}
+            )
+        ).code == 403
 
     @pytest.mark.asyncio
     async def test_optional_valid_jwt(self, broker_tornado_app):
         app, auth = broker_tornado_app
         jwt = await _get_broker_jwt_async(auth)
-        res = await self._fetch(app, "/optional", headers={"Authorization": f"Bearer {jwt}"})
+        res = await self._fetch(
+            app, "/optional", headers={"Authorization": f"Bearer {jwt}"}
+        )
         assert json.loads(res.body)["authenticated"] is True
 
     @pytest.mark.asyncio
     async def test_optional_no_token(self, broker_tornado_app):
         app, auth = broker_tornado_app
-        assert json.loads((await self._fetch(app, "/optional")).body)["authenticated"] is False
+        assert (
+            json.loads((await self._fetch(app, "/optional")).body)["authenticated"]
+            is False
+        )
 
     @pytest.mark.asyncio
     async def test_optional_expired_jwt(self, broker_tornado_app):
         app, auth = broker_tornado_app
         jwt = await _get_expired_broker_jwt_async(auth)
-        assert json.loads((await self._fetch(app, "/optional", headers={"Authorization": f"Bearer {jwt}"})).body)["authenticated"] is False
+        assert (
+            json.loads(
+                (
+                    await self._fetch(
+                        app, "/optional", headers={"Authorization": f"Bearer {jwt}"}
+                    )
+                ).body
+            )["authenticated"]
+            is False
+        )
 
     @pytest.mark.asyncio
     async def test_optional_invalid_jwt(self, broker_tornado_app):
         app, auth = broker_tornado_app
-        assert json.loads((await self._fetch(app, "/optional", headers={"Authorization": "Bearer junk"})).body)["authenticated"] is False
+        assert (
+            json.loads(
+                (
+                    await self._fetch(
+                        app, "/optional", headers={"Authorization": "Bearer junk"}
+                    )
+                ).body
+            )["authenticated"]
+            is False
+        )
+
+    @pytest.mark.asyncio
+    async def test_optional_claims_fail(self, broker_tornado_app):
+        app, auth = broker_tornado_app
+        jwt = await _get_broker_jwt_async(auth)
+        res = await self._fetch(
+            app, "/optional-claims", headers={"Authorization": f"Bearer {jwt}"}
+        )
+        assert json.loads(res.body)["authenticated"] is False
 
     @pytest.mark.asyncio
     async def test_jwks_endpoint(self, broker_tornado_app):
@@ -832,6 +1156,29 @@ class TestTornadoBrokerIntegration:
         res = await self._fetch(app, "/api/auth/v2/.well-known/jwks.json")
         assert res.code == 200
         assert "keys" in json.loads(res.body)
+
+    @pytest.mark.asyncio
+    async def test_broker_token_exchange(self, broker_tornado_app, mocker):
+        app, auth = broker_tornado_app
+        mocker.patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        )
+        mocker.patch(
+            "py_oidc_auth.auth_base.get_username",
+            new_callable=AsyncMock,
+            return_value="janedoe",
+        )
+        res = await self._post(
+            app,
+            "/api/auth/v2/token",
+            {
+                "grant_type": GRANT_TYPE_TOKEN_EXCHANGE,
+                "subject_token": "fake-idp-token",
+                "subject_token_type": TOKEN_TYPE_ACCESS,
+            },
+        )
+        assert res.code == 200
+        assert "access_token" in json.loads(res.body)
 
 
 # ---------------------------------------------------------------------------
@@ -871,7 +1218,9 @@ class TestLazyRefreshNoRunningLoop:
 
 class TestSQLAlchemySigningKeyRace:
     @pytest.mark.asyncio
-    async def test_concurrent_key_creation_returns_same_key(self, tmp_path: Any) -> None:
+    async def test_concurrent_key_creation_returns_same_key(
+        self, tmp_path: Any
+    ) -> None:
         """Two stores on the same DB racing to insert the signing key.
 
         One INSERT wins; the other hits IntegrityError (the

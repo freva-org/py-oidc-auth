@@ -800,6 +800,13 @@ class TestOIDCAuthBrokerJWKS:
         assert "keys" in jwks
         assert jwks["keys"][0]["kty"] == "RSA"
 
+    @pytest.mark.asyncio
+    async def test_broker_jwks_raises_without_broker_mode(self) -> None:
+        from py_oidc_auth import OIDCAuth
+        auth = OIDCAuth(client_id="test", discovery_url="http://localhost/oidc")
+        with pytest.raises(RuntimeError, match="broker_mode"):
+            await auth.broker_jwks()
+
 
 # ---------------------------------------------------------------------------
 # OIDCAuth — mint_and_store
