@@ -21,6 +21,8 @@ Usage
         client_secret="secret",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
         scopes="myscope profile email",
+        broker_mode=True,
+        broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
     )
 
     app = Quart(__name__)
@@ -48,6 +50,8 @@ from typing import (
     cast,
 )
 
+import jwt as pyjwt
+
 try:
     from quart import Blueprint, Response, jsonify, redirect, request
 except ImportError:  # pragma: no cover
@@ -62,6 +66,7 @@ if TYPE_CHECKING:
 from .auth_base import OIDCAuth
 from .exceptions import InvalidRequest
 from .schema import IDToken, PromptField
+from .utils import token_field_matches
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +80,13 @@ def _error_response(status_code: int, detail: str) -> Response:
 
 
 class QuartOIDCAuth(OIDCAuth):
-    """Reusable OpenID Connect helper for Quart."""
+    """Reusable OpenID Connect helper for Quart.
+
+    Provides :meth:`required` :meth:`optional` decorators and
+    :meth:`create_auth_blueprint` for standard auth endpoints.  When
+    ``broker_mode=True`` the decorators verify broker JWTs and the blueprint
+    token endpoint issues broker JWTs instead of passing IDP tokens through.
+    """
 
     def _extract_bearer_token(self) -> Optional[str]:
         auth_header = request.headers.get("Authorization", "")
@@ -104,15 +115,30 @@ class QuartOIDCAuth(OIDCAuth):
         def decorator(fn: F) -> F:
             @functools.wraps(fn)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                credentials = self._extract_bearer_token()
-                try:
-                    token = await self._get_token(
-                        credentials,
-                        required_scopes=scope_set or None,
-                        effective_claims=effective_claims,
-                    )
-                except InvalidRequest as exc:
-                    return _error_response(exc.status_code, exc.detail)
+                bearer = self._extract_bearer_token()
+                if self.broker_mode:
+                    if not bearer:
+                        return _error_response(401, "Missing Bearer token.")
+                    try:
+                        broker = await self._ensure_broker_ready()
+                        token = broker.verify(bearer)
+                    except pyjwt.ExpiredSignatureError:
+                        return _error_response(401, "Token has expired.")
+                    except pyjwt.PyJWTError as exc:
+                        return _error_response(401, f"Invalid token: {exc}")
+                    if effective_claims and not token_field_matches(
+                        bearer, claims=effective_claims
+                    ):
+                        return _error_response(403, "Insufficient claims.")
+                else:
+                    try:
+                        token = await self._get_token(
+                            bearer,
+                            required_scopes=scope_set or None,
+                            effective_claims=effective_claims,
+                        )
+                    except InvalidRequest as exc:
+                        return _error_response(exc.status_code, exc.detail)
                 return await fn(token, *args, **kwargs)
 
             return wrapper  # type: ignore[return-value]
@@ -140,17 +166,28 @@ class QuartOIDCAuth(OIDCAuth):
         def decorator(fn: F) -> F:
             @functools.wraps(fn)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                credentials = self._extract_bearer_token()
+                bearer = self._extract_bearer_token()
                 token: Optional[IDToken] = None
-                if credentials:
-                    try:
-                        token = await self._get_token(
-                            credentials,
-                            required_scopes=scope_set or None,
-                            effective_claims=effective_claims,
-                        )
-                    except InvalidRequest:
-                        pass
+                if bearer:
+                    if self.broker_mode:
+                        try:
+                            broker = await self._ensure_broker_ready()
+                            token = broker.verify(bearer)
+                            if effective_claims and not token_field_matches(
+                                bearer, claims=effective_claims
+                            ):
+                                token = None
+                        except pyjwt.PyJWTError:
+                            pass
+                    else:
+                        try:
+                            token = await self._get_token(
+                                bearer,
+                                required_scopes=scope_set or None,
+                                effective_claims=effective_claims,
+                            )
+                        except InvalidRequest:
+                            pass
                 return await fn(token, *args, **kwargs)
 
             return wrapper  # type: ignore[return-value]
@@ -160,12 +197,13 @@ class QuartOIDCAuth(OIDCAuth):
     def create_auth_blueprint(
         self,
         prefix: str = "",
-        login: str = "/auth/v2/login",
-        callback: str = "/auth/v2/callback",
-        token: str = "/auth/v2/token",
+        login: Optional[str] = "/auth/v2/login",
+        callback: Optional[str] = "/auth/v2/callback",
+        token: Optional[str] = "/auth/v2/token",
         device_flow: Optional[str] = "/auth/v2/device",
         logout: Optional[str] = "/auth/v2/logout",
         userinfo: Optional[str] = "/auth/v2/userinfo",
+        jwks: Optional[str] = "/auth/v2/.well-known/jwks.json",
     ) -> Blueprint:
         """Build a Quart :class:`quart.Blueprint` with standard auth routes.
 
@@ -176,7 +214,9 @@ class QuartOIDCAuth(OIDCAuth):
         :param device_flow: Path for starting the device flow.
         :param logout: Path for logout.
         :param userinfo: Path for userinfo.
+        :param jwks: Path for the JWKS endpoint (broker mode only).
         :returns: Blueprint to register on your app.
+        :raises ValueError: When ``broker_mode=True`` and ``token`` is falsy.
 
         Request example
 
@@ -187,6 +227,8 @@ class QuartOIDCAuth(OIDCAuth):
             Authorization: Bearer <access token>
 
         """
+        self._validate_broker_config(has_token_endpoint=bool(token))
+
         bp = Blueprint("oidc_auth", __name__, url_prefix=prefix)
 
         if login:
@@ -233,6 +275,7 @@ class QuartOIDCAuth(OIDCAuth):
                 return jsonify(result.model_dump())
 
         if token:
+            _token_endpoint = f"{prefix}{token}"
 
             @bp.route(token, methods=["POST"])
             async def _fetch_or_refresh_token() -> Response:
@@ -242,26 +285,44 @@ class QuartOIDCAuth(OIDCAuth):
                 refresh_token = form.get("refresh-token")
                 device_code = form.get("device-code")
                 code_verifier = form.get("code_verifier")
+                grant_type = form.get("grant_type")
+                subject_token = form.get("subject_token")
                 try:
-                    result = await self.token(
-                        f"{prefix}/{token}",
-                        code=code,
-                        redirect_uri=redirect_uri,
-                        refresh_token=refresh_token,
-                        device_code=device_code,
-                        code_verifier=code_verifier,
-                    )
+                    if self.broker_mode:
+                        result = await self.broker_token(
+                            token_endpoint=_token_endpoint,
+                            code=code,
+                            redirect_uri=redirect_uri,
+                            refresh_token=refresh_token,
+                            device_code=device_code,
+                            code_verifier=code_verifier,
+                            grant_type=grant_type,
+                            subject_token=subject_token,
+                        )
+                    else:
+                        result = await self.token(
+                            _token_endpoint,
+                            code=code,
+                            redirect_uri=redirect_uri,
+                            refresh_token=refresh_token,
+                            device_code=device_code,
+                            code_verifier=code_verifier,
+                        )
                 except InvalidRequest as exc:
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
+
+        if jwks and self.broker_mode:
+
+            @bp.route(jwks, methods=["GET"])
+            async def _jwks() -> Response:
+                return jsonify(await self.broker_jwks())
 
         if logout:
 
             @bp.route(logout, methods=["GET"])
             async def _logout() -> Union[Response, "WerkzeugRes"]:
-                post_logout_redirect_uri = request.args.get(
-                    "post_logout_redirect_uri"
-                )
+                post_logout_redirect_uri = request.args.get("post_logout_redirect_uri")
                 target = await self.logout(post_logout_redirect_uri)
                 return redirect(target)
 
@@ -269,9 +330,9 @@ class QuartOIDCAuth(OIDCAuth):
 
             @bp.route(userinfo, methods=["GET"])
             @self.required()
-            async def _userinfo(token: IDToken) -> Response:
+            async def _userinfo(token_obj: IDToken) -> Response:
                 try:
-                    result = await self.userinfo(token, dict(request.headers))
+                    result = await self.userinfo(token_obj, dict(request.headers))
                 except InvalidRequest as exc:
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())

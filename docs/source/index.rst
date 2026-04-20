@@ -29,7 +29,7 @@ It provides
 * a framework independent async core: ``OIDCAuth``
 * framework adapters that expose common auth endpoints
 * simple ``required()`` and ``optional()`` helpers to protect routes
-
+* token minting/brokering and token federation
 
 Supported frameworks
 ~~~~~~~~~~~~~~~~~~~~
@@ -100,6 +100,8 @@ Features
 * Userinfo lookup
 * Provider initiated logout (end session) when supported
 * Bearer token validation using provider JWKS, issuer, and audience
+* Optional token minting.
+* Optional token trust network and token federation.
 * Optional scope checks and simple claim constraints
 * Full type annotations
 
@@ -197,6 +199,10 @@ custom routes to it, and include it in your app:
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
                audience="my-aud",
+               broker_mode=True,
+               broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+               broker_audience="myapp-api",
+               trusted_issuers=["https://other-instance.example.org"],
            )
 
            # Get the router and add custom endpoints
@@ -232,6 +238,10 @@ custom routes to it, and include it in your app:
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
                audience="my-aud",
+               broker_mode=True,
+               broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+               broker_audience="myapp-api",
+               trusted_issuers=["https://other-instance.example.org"],
            )
 
            # Get the blueprint and add custom endpoints
@@ -263,6 +273,10 @@ custom routes to it, and include it in your app:
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
                audience="my-aud",
+               broker_mode=True,
+               broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+               broker_audience="myapp-api",
+               trusted_issuers=["https://other-instance.example.org"],
            )
 
            # Get the blueprint and add custom endpoints
@@ -293,6 +307,10 @@ custom routes to it, and include it in your app:
                discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                scopes="myscope profile email",
                audience="my-aud",
+               broker_mode=True,
+               broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+               broker_audience="myapp-api",
+               trusted_issuers=["https://other-instance.example.org"],
            )
 
            # Custom endpoint alongside the standard OIDC routes
@@ -323,6 +341,10 @@ custom routes to it, and include it in your app:
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                 scopes="myscope profile email",
                 audience="my-aud",
+                broker_mode=True,
+                broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+                broker_audience="myapp-api",
+                trusted_issuers=["https://other-instance.example.org"],
            )
 
            # Custom handler alongside the standard OIDC routes
@@ -358,6 +380,10 @@ custom routes to it, and include it in your app:
                 discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
                 scopes="myscope profile email",
                 audience="my-aud",
+                broker_mode=True,
+                broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+                broker_audience="myapp-api",
+                trusted_issuers=["https://other-instance.example.org"],
            )
 
            @get("/auth/v2/auth-ports")
@@ -393,6 +419,37 @@ FastAPI Example:
    @auth.required(scopes="admin", claims={"groups": ["admins"]})
    def admin(token: IDToken) -> Dict[str, str]:
        return {"sub": token.sub}
+
+
+Token minting and federation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``broker_mode=True`` option allows for the creation of minting of application
+specific tokens rather than passing tokens from the Identity Provider.
+
+Token minting also allows for token federation where multiple applications can
+be configured to trust each others tokens.
+
+In broker mode the Identity Provider Token must be stored securely server site.
+You can choose from a MongoDB, SQLiteDB, PostGresDB or a MySQL/MariaDB. To
+configure the token storage you can either use a connection string or create
+a :class:`py_oidc.broker.store.BrokerStore` class from your own Database storage
+object (flask  example):
+
+.. code-block:: python
+
+    from pymongo import AsyncMongoClient
+    from py_oidc_auth import MongoDBBrokerStore, LitestarOIDCAuth
+    mongo_client = AsyncMongoClient("mongodb://myser:mypass@host")
+    auth =  FlaskOIDCAuth(
+                ...,
+                broker_mode=True,
+                broker_store_obj=MongoDBBrokerStore(db=mongo_client["my-app"]),
+                broker_audience="myapp-api",
+                trusted_issuers=["https://other-instance.example.org"],
+           )
+
+
 
 Documentation
 ~~~~~~~~~~~~~

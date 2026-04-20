@@ -16,6 +16,7 @@ It provides
 * a framework independent async core: `OIDCAuth`
 * framework adapters that expose common auth endpoints
 * simple `required()` and `optional()` helpers to protect routes
+* token minting/brokering and token federation
 
 ## What it does
 
@@ -142,6 +143,10 @@ auth = ...(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 ```
 
@@ -161,6 +166,10 @@ auth = FastApiOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 app.include_router(auth.create_auth_router(prefix="/api"))
@@ -192,6 +201,10 @@ auth = FlaskOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -216,6 +229,10 @@ auth = QuartOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -241,6 +258,10 @@ auth = DjangoOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 @auth.required()
@@ -274,6 +295,10 @@ auth = TornadoOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 class ProtectedHandler(tornado.web.RequestHandler):
@@ -302,6 +327,10 @@ auth = LitestarOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 @get("/protected")
@@ -332,6 +361,14 @@ FastApi Example:
 def admin(token: IDToken) -> Dict[str, str]:
     return {"sub": token.sub}
 ```
+
+
+## Token minting and federation
+The `broker_mode=True` option allows for the creation of minting of application
+specific tokens rather than passing tokens from the Identity Provider.
+
+Token minting also allows for token federation where multiple applications can
+be configured to trust each others tokens.
 
 ## Related
 

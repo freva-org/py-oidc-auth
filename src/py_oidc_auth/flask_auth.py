@@ -2,7 +2,12 @@
 
 Flask view functions are synchronous.
 The base implementation is async, so this adapter uses ``asyncio.run`` to call
-the async methods.
+the async methods.  The broker ``verify()`` call is synchronous and is called
+directly.
+
+Flask view functions are synchronous.  The base implementation is async, so
+this adapter uses ``asyncio.run`` to call the async methods.  The broker
+``verify()`` call is synchronous and is called directly.
 
 Install::
 
@@ -22,6 +27,8 @@ Usage
         client_secret="secret",
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
         scopes="myscope profile email",
+        broker_mode=True,
+        broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
     )
 
     app = Flask(__name__)
@@ -50,6 +57,8 @@ from typing import (
     cast,
 )
 
+import jwt as pyjwt
+
 try:
     from flask import Blueprint, Response, jsonify, redirect, request
 except ImportError:  # pragma: no cover
@@ -61,6 +70,7 @@ except ImportError:  # pragma: no cover
 from .auth_base import OIDCAuth
 from .exceptions import InvalidRequest
 from .schema import IDToken, PromptField
+from .utils import token_field_matches
 
 if TYPE_CHECKING:
     from werkzeug.wrapper.response import Response as WerkzeugRes
@@ -80,14 +90,16 @@ def _error_response(status_code: int, detail: str) -> Response:
 class FlaskOIDCAuth(OIDCAuth):
     """Reusable OpenID Connect helper for Flask.
 
+    The auth endpoints are suitable for browser based login and for programmatic
+    token refresh.
+
     This adapter provides:
 
     * :meth:`required` and :meth:`optional` decorators for view functions
     * :meth:`create_auth_blueprint` to expose a standard set of auth endpoints
-
-    The auth endpoints are suitable for browser based login and for programmatic
-    token refresh.
-
+            When ``broker_mode=True`` the decorators verify broker JWTs and the
+            blueprint token endpoints issues broker JWTs instead of passing IDP
+            tokens through.
     """
 
     def _extract_bearer_token(self) -> Optional[str]:
@@ -127,17 +139,32 @@ class FlaskOIDCAuth(OIDCAuth):
         def decorator(fn: F) -> F:
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                credentials = self._extract_bearer_token()
-                try:
-                    token = asyncio.run(
-                        self._get_token(
-                            credentials,
-                            required_scopes=scope_set or None,
-                            effective_claims=effective_claims,
+                bearer = self._extract_bearer_token()
+                if self.broker_mode:
+                    if not bearer:
+                        return _error_response(401, "Missing Bearer token.")
+                    try:
+                        broker = asyncio.run(self._ensure_broker_ready())
+                        token = broker.verify(bearer)
+                    except pyjwt.ExpiredSignatureError:
+                        return _error_response(401, "Token has expired.")
+                    except pyjwt.PyJWTError as exc:
+                        return _error_response(401, f"Invalid token: {exc}")
+                    if effective_claims and not token_field_matches(
+                        bearer, claims=effective_claims
+                    ):
+                        return _error_response(403, "Insufficient claims.")
+                else:
+                    try:
+                        token = asyncio.run(
+                            self._get_token(
+                                bearer,
+                                required_scopes=scope_set or None,
+                                effective_claims=effective_claims,
+                            )
                         )
-                    )
-                except InvalidRequest as exc:
-                    return _error_response(exc.status_code, exc.detail)
+                    except InvalidRequest as exc:
+                        return _error_response(exc.status_code, exc.detail)
                 return fn(token, *args, **kwargs)
 
             return wrapper  # type: ignore[return-value]
@@ -176,19 +203,30 @@ class FlaskOIDCAuth(OIDCAuth):
         def decorator(fn: F) -> F:
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                credentials = self._extract_bearer_token()
+                bearer = self._extract_bearer_token()
                 token: Optional[IDToken] = None
-                if credentials:
-                    try:
-                        token = asyncio.run(
-                            self._get_token(
-                                credentials,
-                                required_scopes=scope_set or None,
-                                effective_claims=effective_claims,
+                if bearer:
+                    if self.broker_mode:
+                        try:
+                            broker = asyncio.run(self._ensure_broker_ready())
+                            token = broker.verify(bearer)
+                            if effective_claims and not token_field_matches(
+                                bearer, claims=effective_claims
+                            ):
+                                token = None
+                        except pyjwt.PyJWTError:
+                            pass
+                    else:
+                        try:
+                            token = asyncio.run(
+                                self._get_token(
+                                    bearer,
+                                    required_scopes=scope_set or None,
+                                    effective_claims=effective_claims,
+                                )
                             )
-                        )
-                    except InvalidRequest:
-                        logger.info("Optional auth validation failed")
+                        except InvalidRequest:
+                            pass
                 return fn(token, *args, **kwargs)
 
             return wrapper  # type: ignore[return-value]
@@ -198,12 +236,13 @@ class FlaskOIDCAuth(OIDCAuth):
     def create_auth_blueprint(
         self,
         prefix: str = "",
-        login: str = "/auth/v2/login",
-        callback: str = "/auth/v2/callback",
-        token: str = "/auth/v2/token",
+        login: Optional[str] = "/auth/v2/login",
+        callback: Optional[str] = "/auth/v2/callback",
+        token: Optional[str] = "/auth/v2/token",
         device_flow: Optional[str] = "/auth/v2/device",
         logout: Optional[str] = "/auth/v2/logout",
         userinfo: Optional[str] = "/auth/v2/userinfo",
+        jwks: Optional[str] = "/auth/v2/.well-known/jwks.json",
     ) -> Blueprint:
         """Build a Flask :class:`flask.Blueprint` with standard auth routes.
 
@@ -216,7 +255,9 @@ class FlaskOIDCAuth(OIDCAuth):
         :param device_flow: Path for starting the device flow.
         :param logout: Path for logout.
         :param userinfo: Path for userinfo.
+        :param jwks: Path for the JWKS endpoint (broker mode only).
         :returns: A blueprint ready to be registered on your app.
+        :raises ValueError: When ``broker_mode=True`` and ``token`` is falsy.
 
         Request examples
 
@@ -280,6 +321,7 @@ class FlaskOIDCAuth(OIDCAuth):
                 return jsonify(result.model_dump())
 
         if token:
+            _token_endpoint = f"{prefix}{token}"
 
             @bp.route(token, methods=["POST"])
             def _fetch_or_refresh_token() -> Union[Response, "WerkzeugRes"]:
@@ -288,41 +330,59 @@ class FlaskOIDCAuth(OIDCAuth):
                 refresh_token = request.form.get("refresh-token")
                 device_code = request.form.get("device-code")
                 code_verifier = request.form.get("code_verifier")
+                grant_type = request.form.get("grant_type")
+                subject_token = request.form.get("subject_token")
                 try:
-                    result = asyncio.run(
-                        self.token(
-                            f"{prefix}/{token}",
-                            code=code,
-                            redirect_uri=redirect_uri,
-                            refresh_token=refresh_token,
-                            device_code=device_code,
-                            code_verifier=code_verifier,
+                    if self.broker_mode:
+                        result = asyncio.run(
+                            self.broker_token(
+                                token_endpoint=_token_endpoint,
+                                code=code,
+                                redirect_uri=redirect_uri,
+                                refresh_token=refresh_token,
+                                device_code=device_code,
+                                code_verifier=code_verifier,
+                                grant_type=grant_type,
+                                subject_token=subject_token,
+                            )
                         )
-                    )
+                    else:
+                        result = asyncio.run(
+                            self.token(
+                                _token_endpoint,
+                                code=code,
+                                redirect_uri=redirect_uri,
+                                refresh_token=refresh_token,
+                                device_code=device_code,
+                                code_verifier=code_verifier,
+                            )
+                        )
                 except InvalidRequest as exc:
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
+
+        if jwks and self.broker_mode:
+
+            @bp.route(jwks, methods=["GET"])
+            def _jwks() -> Response:
+                return jsonify(asyncio.run(self.broker_jwks()))
 
         if logout:
 
             @bp.route(logout, methods=["GET"])
             def _logout() -> Union[Response, "WerkzeugRes"]:
-                post_logout_redirect_uri = request.args.get(
-                    "post_logout_redirect_uri"
-                )
-                redirect_target = asyncio.run(
-                    self.logout(post_logout_redirect_uri)
-                )
+                post_logout_redirect_uri = request.args.get("post_logout_redirect_uri")
+                redirect_target = asyncio.run(self.logout(post_logout_redirect_uri))
                 return redirect(redirect_target)
 
         if userinfo:
 
             @bp.route(userinfo, methods=["GET"])
             @self.required()
-            def _userinfo(token: IDToken) -> Response:
+            def _userinfo(token_obj: IDToken) -> Response:
                 try:
                     result = asyncio.run(
-                        self.userinfo(token, dict(request.headers))
+                        self.userinfo(token_obj, dict(request.headers))
                     )
                 except InvalidRequest as exc:
                     return _error_response(exc.status_code, exc.detail)

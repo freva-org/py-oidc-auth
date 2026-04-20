@@ -198,6 +198,7 @@ def _create_fastapi_app() -> "FastAPI":
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
+        broker_mode=os.getenv("OIDC_BROKER_MODE"),
     )
     app.include_router(auth.create_auth_router(prefix="/api/test"))
     claims = string_to_dict(os.getenv("OIDC_ADMIN_CLAIM", ""))
@@ -233,6 +234,7 @@ def _create_flask_app() -> Any:
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
+        broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE", "0"))),
     )
 
     app = Flask("test")
@@ -304,6 +306,7 @@ def _create_quart_app() -> Any:
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
+        broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE", "0"))),
     )
 
     app = Quart("test")
@@ -332,6 +335,8 @@ def _create_tornado_app() -> Any:
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
+        broker_mode=True,
+        broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE", "0"))),
     )
 
     class ProtectedHandler(tornado.web.RequestHandler):
@@ -365,6 +370,7 @@ def _create_litestar_app() -> Any:
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
+        broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE", "0"))),
     )
 
     @get("/protected", dependencies={"token": ls_auth.required()})
@@ -398,6 +404,7 @@ def _create_django_app() -> Any:
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
+        broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE", "0"))),
     )
 
     from django.http import HttpRequest, JsonResponse
@@ -452,6 +459,7 @@ def set_env(namespace: argparse.Namespace) -> None:
         os.environ["OIDC_SCOPES"] = " ".join(
             namespace.scopes or ["openid", "profile" "email"]
         )
+        os.environ["OIDC_BROKER_MODE"] = str(int(namespace.no_broker_mode is False))
         yield
     finally:
         os.environ = env
@@ -560,6 +568,11 @@ def add_server_parser(
         default="openid profile email",
         help="OIDC scopes",
         nargs="*",
+    )
+    parser.add_argument(
+        "--no-broker-mode",
+        action="store_true",
+        help="Do not enable broker mode.",
     )
     return parser
 
