@@ -27,6 +27,10 @@ Quick start
         discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
         scopes="openid profile email",
         offline_access=True,
+        broker_mode=True,
+        broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+        broker_audience="myapp-api",
+        trusted_issuers=["https://other-instance.example.org"],
     )
 
     login_url = await auth.login(
@@ -56,6 +60,8 @@ from urllib.parse import urlencode, urljoin
 import httpx
 import jwt as pyjwt
 
+from .broker.issuer import TokenBroker
+from .broker.store import BrokerStore, create_broker_store
 from .exceptions import InvalidRequest
 from .schema import (
     DeviceStartResponse,
@@ -68,6 +74,7 @@ from .schema import (
 from .token_validation import TokenVerifier
 from .utils import (
     OIDCConfig,
+    get_username,
     oidc_request,
     process_payload,
     query_user,
@@ -123,18 +130,71 @@ class OIDCAuth:
                      discovery-url
     :param issuer: Use this issuer instead of the one provided by the
                    disovery-url
+    :param broker_mode: Enable token broker mode.  When ``True``, the library
+        mints its own RS256-signed JWTs instead of passing IDP tokens through.
+        ``required()`` and ``optional()`` verify against the broker JWKS.
+        A token endpoint **must** be configured in ``create_auth_router`` when
+        broker mode is enabled.
+    :param broker_store_url: Connection URL for the broker storage backend.
+        Defaults to a local SQLite file.  Supported schemes:
+        ``memory://``, ``mongodb://``, ``sqlite+aiosqlite:///``,
+        ``postgresql+asyncpg://``, ``mysql+aiomysql://``.
+    :param broker_store_obj: A pre-instantiated
+        :class:`~py_oidc_auth.broker.store.BrokerStore`. Use this when you want
+        to share an existing database connection rather than have the library
+        create its own. Takes precedence over ``broker_store_url``. For
+        example, pass a :class:`~py_oidc_auth.broker.store.MongoDBBrokerStore`
+        built from your application's existing Motor/pymongo client, or a
+        :class:`~py_oidc_auth.broker.store.SQLAlchemyBrokerStore` built from
+        your existing async engine.
+    :param broker_audience: ``aud`` claim written into minted JWTs.
+        Defaults to ``py-oidc-auth``.
+    :param trusted_issuers: List of peer instance base URLs whose JWTs are
+        accepted for cross-instance federation.
+    :param broker_jwks_path: Path appended to peer URLs when fetching JWKS.
 
     Example
     -------
     .. code-block:: python
+
+        from py_oidc_auth import OIDCAuth
 
         auth = OIDCAuth(
             client_id="my client",
             discovery_url="https://idp.example.org/.well-known/openid-configuration",
             client_secret="secret",
             scopes="myscope profile email",
+            appname="my-app",
             audience="my-aud",
+            broker_mode=True,
+            broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+            broker_audience="myapp-api",
+            trusted_issuers=["https://other-instance.example.org"],
         )
+
+    With an existing database connection:
+
+    .. code-block:: python
+
+
+        from pymongo import AsyncMongoClient
+        from py_oidc_auth import OIDCAuth, MongoDBBrokerStore
+
+        mongo_client = AsyncMongoClient("mongodb://user:pass@host")
+        mongo_store = MongoDBBrokerStore(db=mongo_client["my_app"])
+        auth = OIDCAuth(
+            client_id="my client",
+            discovery_url="https://idp.example.org/.well-known/openid-configuration",
+            client_secret="secret",
+            scopes="myscope profile email",
+            appname="my-app",
+            audience="my-aud",
+            broker_mode=True,
+            broker_store_obj=mongo_store,
+            broker_audience="myapp-api",
+            trusted_issuers=["https://other-instance.example.org"],
+        )
+
 
     """
 
@@ -145,12 +205,19 @@ class OIDCAuth:
         client_secret: Optional[str] = None,
         scopes: str = "profile email",
         audience: Optional[str] = None,
+        appname: str = "py-oidc-auth",
         proxy: str = "",
         claims: Optional[Dict[str, Any]] = None,
         offline_access: bool = True,
         timeout_sec: int = 10,
         jwks_uri: Optional[str] = None,
         issuer: Optional[str] = None,
+        broker_mode: bool = False,
+        broker_store_url: Optional[str] = None,
+        broker_store_obj: Optional[BrokerStore] = None,
+        broker_audience: str = "py-oidc-auth",
+        trusted_issuers: Optional[list[str]] = None,
+        broker_jwks_path: str = "/auth/v2/.well-known/jwks.json",
     ) -> None:
         self._lock = asyncio.Lock()
         self.config = OIDCConfig(
@@ -167,6 +234,17 @@ class OIDCAuth:
         self._jwks_uri = jwks_uri
         self._issuer = issuer
         self._verifier: Optional[TokenVerifier] = None
+
+        # Broker mode
+        self.broker_mode = broker_mode
+        self.appname = appname
+        self._broker_store_url = broker_store_url
+        self._broker_store_obj = broker_store_obj
+        self.broker_audience = broker_audience
+        self.trusted_issuers: list[str] = trusted_issuers or []
+        self.broker_jwks_path = broker_jwks_path
+        self._broker: Optional["TokenBroker"] = None
+        self._broker_lock = asyncio.Lock()
 
     async def _ensure_auth_initialized(self) -> None:
         """Load the discovery document and prepare token validation.
@@ -197,6 +275,56 @@ class OIDCAuth:
                 logger.info("OIDC initialized from %s", self.config.discovery_url)
             except Exception as exc:
                 logger.exception("Failed to initialise OIDC: %s", exc)
+
+    async def _ensure_broker_ready(self) -> "TokenBroker":
+        """Lazily initialise and return the :class:`~py_oidc_auth.broker.issuer.TokenBroker`."""
+        if self._broker is not None:
+            return self._broker
+        async with self._broker_lock:
+            store: BrokerStore = self._broker_store_obj or create_broker_store(
+                self._broker_store_url, self.appname
+            )
+            broker = TokenBroker(
+                store=store,
+                issuer=self.config.proxy or self.broker_audience,
+                audience=self.broker_audience,
+                trusted_issuers=self.trusted_issuers,
+                jwks_path=self.broker_jwks_path,
+            )
+            await broker.setup()
+            self._broker = broker
+        return self._broker
+
+    def _validate_broker_config(self, has_token_endpoint: bool) -> None:
+        """Validate broker/token-endpoint consistency.
+
+        Call this from every framework adapter's router/blueprint registration
+        method (``create_auth_router``, ``create_blueprint``, etc.) before
+        registering any routes.  This ensures the check fires regardless of
+        which framework is in use.
+
+        :param has_token_endpoint: ``True`` if the adapter is registering a
+            token endpoint.
+        :raises ValueError: When ``broker_mode=True`` and no token endpoint is
+            configured — clients would have no way to obtain broker JWTs.
+
+        The reverse case (token endpoint without broker mode) is logged as a
+        warning rather than an error because it is a valid configuration for
+        pure passthrough deployments, albeit one that foregoes audience
+        restriction on IDP tokens.
+        """
+        if self.broker_mode and not has_token_endpoint:
+            raise ValueError(
+                "broker_mode=True requires a token endpoint. "
+                "Configure one in your framework adapter's router/blueprint "
+                "registration call."
+            )
+        if has_token_endpoint and not self.broker_mode:
+            logger.warning(
+                "A token endpoint is configured but broker_mode=False. "
+                "Clients will receive raw IDP tokens without audience "
+                "restriction. Consider setting broker_mode=True."
+            )
 
     async def make_oidc_request(
         self,
@@ -629,3 +757,280 @@ class OIDCAuth:
         }
         authorization = cast(str, process_payload(header, "authorization"))
         return await query_user(token_data, authorization, self.config)
+
+    # ------------------------------------------------------------------
+    # Broker methods — framework-agnostic, called by all adapters
+    # ------------------------------------------------------------------
+
+    async def broker_jwks(self) -> Dict[str, Any]:
+        """Return the broker public key as a JWKS document.
+
+        Framework adapters expose this via a ``GET /.well-known/jwks.json``
+        endpoint so external services can verify broker JWTs.
+
+        :returns: JWKS document as a plain dict.
+        :raises RuntimeError: If ``broker_mode`` is ``False``.
+
+        Example
+        -------
+        .. code-block:: python
+
+            # Flask
+            @app.get("/auth/v2/.well-known/jwks.json")
+            async def jwks():
+                return jsonify(await auth.broker_jwks())
+
+        """
+        if not self.broker_mode:
+            raise RuntimeError("broker_jwks() requires broker_mode=True.")
+        broker = await self._ensure_broker_ready()
+        return dict(broker.jwks())
+
+    async def broker_token(
+        self,
+        token_endpoint: str,
+        code: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+        device_code: Optional[str] = None,
+        code_verifier: Optional[str] = None,
+        subject_token: Optional[str] = None,
+        grant_type: Optional[str] = None,
+    ) -> "Token":
+        """Unified broker token endpoint — framework-agnostic entry point.
+
+        Handles all grant types supported in broker mode:
+
+        * **Auth code** — pass ``code`` + ``redirect_uri`` (+ optional
+          ``code_verifier`` for PKCE).
+        * **Device code** — pass ``device_code``.
+        * **Broker refresh** — pass ``refresh_token`` (a previously issued
+          broker JWT); extracts the ``jti``, looks up the stored IDP refresh
+          token, rotates the session and returns a new broker JWT.
+        * **RFC 8693 token exchange** — pass
+          ``grant_type='urn:ietf:params:oauth:grant-type:token-exchange'``
+          and ``subject_token=<IDP access token>``; validates the IDP token
+          and issues a broker JWT directly.
+
+        In all cases the response :class:`~py_oidc_auth.schema.Token` contains
+        the broker JWT as both ``access_token`` and ``refresh_token``.
+
+        :param token_endpoint: Full path used to compute default redirect URIs.
+        :param code: Authorization code (auth-code flow).
+        :param redirect_uri: Redirect URI for the auth-code exchange.
+        :param refresh_token: Broker JWT to refresh.
+        :param device_code: Device code for polling.
+        :param code_verifier: PKCE verifier.
+        :param subject_token: IDP access token for RFC 8693 exchange.
+        :param grant_type: Grant type; pass the RFC 8693 URN for token exchange.
+        :returns: :class:`~py_oidc_auth.schema.Token` with broker JWT.
+        :raises InvalidRequest: On IDP errors, invalid tokens or missing args.
+
+        Example (FastAPI adapter internal call)
+        ----------------------------------------
+        .. code-block:: python
+
+            token = await auth.broker_token(
+                token_endpoint="/api/auth/v2/token",
+                device_code="DEV-123",
+            )
+
+        """
+        from .broker.issuer import GRANT_TYPE_TOKEN_EXCHANGE
+
+        _ = await self._ensure_broker_ready()
+
+        if grant_type == GRANT_TYPE_TOKEN_EXCHANGE and subject_token:
+            return await self.broker_exchange(subject_token)
+
+        if refresh_token and not code and not device_code:
+            return await self.broker_refresh(
+                freva_jwt=refresh_token,
+                token_endpoint=token_endpoint,
+            )
+
+        is_device = bool(device_code)
+        expiry = 2592000 if is_device else 3600  # 30 days device, 1 hour code
+
+        idp_token = await self.token(
+            token_endpoint,
+            code=code,
+            redirect_uri=redirect_uri,
+            device_code=device_code,
+            code_verifier=code_verifier,
+        )
+        return await self.mint_and_store(idp_token, expiry_seconds=expiry)
+
+    async def mint_and_store(
+        self,
+        idp_token: "Token",
+        expiry_seconds: int = 3600,
+    ) -> "Token":
+        """Validate an IDP token, mint a broker JWT and persist the session.
+
+        Called after any successful IDP exchange (auth-code, device-code).
+        Validates the IDP access token claims, resolves the username, mints a
+        broker JWT and stores the IDP refresh token for later rotation.
+
+        :param idp_token: Raw IDP token from :meth:`token`.
+        :param expiry_seconds: Broker JWT lifetime in seconds.
+        :returns: :class:`~py_oidc_auth.schema.Token` carrying the broker JWT
+            as both ``access_token`` and ``refresh_token``.
+        :raises InvalidRequest: If IDP token validation fails.
+        """
+        import datetime as _dt
+
+        broker = await self._ensure_broker_ready()
+
+        idp_claims = await self._get_token(
+            idp_token.access_token,
+            effective_claims=self.config.claims,
+        )
+
+        username = await get_username(
+            current_user=idp_claims,
+            header={"authorization": f"Bearer {idp_token.access_token}"},
+            cfg=self.config,
+        )
+
+        broker_jwt, jti = broker.mint(
+            sub=username or idp_claims.sub or "",
+            email=idp_claims.email,
+            roles=idp_claims.flattened_roles,
+            preferred_username=username,
+            expiry_seconds=expiry_seconds,
+        )
+
+        await broker.save_session(
+            jti=jti,
+            sub=idp_claims.sub,
+            refresh_token=idp_token.refresh_token,
+            expires_at=idp_token.refresh_expires,
+        )
+
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
+        broker_expires = int((now + _dt.timedelta(seconds=expiry_seconds)).timestamp())
+        return Token(
+            access_token=broker_jwt,
+            token_type="Bearer",
+            expires=broker_expires,
+            refresh_token=broker_jwt,
+            refresh_expires=idp_token.refresh_expires,
+            scope=idp_token.scope,
+        )
+
+    async def broker_refresh(
+        self,
+        freva_jwt: str,
+        token_endpoint: str,
+    ) -> "Token":
+        """Refresh a broker session using the stored IDP refresh token.
+
+        Accepts expired broker JWTs — only the ``jti`` claim is needed to
+        look up the session.  The old session is deleted before the new one
+        is created (rotation).
+
+        :param freva_jwt: Current broker JWT (may be expired).
+        :param token_endpoint: Token endpoint path for the IDP refresh call.
+        :returns: Fresh :class:`~py_oidc_auth.schema.Token` with new broker JWT.
+        :raises InvalidRequest: If the JWT is unparsable or the session is gone.
+        """
+        import jwt as _pyjwt
+
+        broker = await self._ensure_broker_ready()
+
+        # Accept expired tokens — we only need the jti
+        try:
+            id_token = broker.verify(freva_jwt)
+            jti: Optional[str] = (
+                str(
+                    getattr(id_token, "jti", None)
+                    or (id_token.model_extra or {}).get("jti")
+                    or ""
+                )
+                or None
+            )
+        except _pyjwt.ExpiredSignatureError:
+            unverified: Dict[str, Any] = _pyjwt.decode(
+                freva_jwt,
+                options={"verify_signature": False, "verify_exp": False},
+            )
+            raw_jti = unverified.get("jti")
+            jti = str(raw_jti) if raw_jti else None
+        except _pyjwt.PyJWTError as exc:
+            raise InvalidRequest(401, detail=f"Invalid refresh token: {exc}")
+
+        if not jti:
+            raise InvalidRequest(401, detail="Invalid refresh token: missing jti.")
+
+        session = await broker.get_session(jti)
+        if not session:
+            raise InvalidRequest(
+                401,
+                detail="Session expired or not found. Please re-authenticate.",
+            )
+        _, idp_refresh_token = session
+
+        # Rotate: remove old session before issuing a new one
+        await broker.delete_session(jti)
+
+        idp_token = await self.token(token_endpoint, refresh_token=idp_refresh_token)
+        return await self.mint_and_store(idp_token)
+
+    async def broker_exchange(self, subject_token: str) -> "Token":
+        """RFC 8693 token exchange: validate an IDP access token, mint broker JWT.
+
+        The ``subject_token`` must be a valid IDP access token.  It is
+        verified against the IDP JWKS.  On success a broker JWT is issued.
+
+        Because a plain token exchange does not yield an IDP refresh token, the
+        resulting broker session cannot be silently refreshed via
+        :meth:`broker_refresh`.  Clients that need long-lived sessions should
+        use the device-code or auth-code flow instead.
+
+        :param subject_token: IDP access token to exchange.
+        :returns: :class:`~py_oidc_auth.schema.Token` with broker JWT.
+        :raises InvalidRequest: If the IDP token is invalid.
+        """
+        import datetime as _dt
+
+        broker = await self._ensure_broker_ready()
+
+        idp_claims = await self._get_token(
+            subject_token,
+            effective_claims=self.config.claims,
+        )
+
+        username = await get_username(
+            current_user=idp_claims,
+            header={"authorization": f"Bearer {subject_token}"},
+            cfg=self.config,
+        )
+
+        broker_jwt, jti = broker.mint(
+            sub=username or idp_claims.sub or "",
+            email=idp_claims.email,
+            roles=idp_claims.flattened_roles,
+            preferred_username=username,
+        )
+
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
+        short_ttl = int((now + _dt.timedelta(hours=1)).timestamp())
+
+        # No IDP refresh token available from a plain exchange
+        await broker.save_session(
+            jti=jti,
+            sub=idp_claims.sub,
+            refresh_token="",
+            expires_at=idp_claims.exp or short_ttl,
+        )
+
+        expires = int((now + _dt.timedelta(seconds=3600)).timestamp())
+        return Token(
+            access_token=broker_jwt,
+            token_type="Bearer",
+            expires=expires,
+            refresh_token=broker_jwt,
+            refresh_expires=expires,
+            scope="openid profile email",
+        )

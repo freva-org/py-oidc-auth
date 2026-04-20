@@ -1,9 +1,9 @@
 """Django integration for py-oidc-auth.
 
 Requires Django 4.1+ async views and an ASGI server (e.g. uvicorn,
-daphne, hypercorn).
+daphne, hypercorn). The broker ``verify()`` call is synchronous.
 
-Requires the ``django`` extra::
+Install::
 
     pip install py-oidc-auth[django]
     conda install -c conda-forge py-oidc-auth-django
@@ -18,6 +18,8 @@ Usage::
         client_id="my-client",
         discovery_url="https://kc.example.com/realms/myrealm/.well-known/openid-configuration",
         scopes="myscope profile email",
+        broker_mode=True,
+        broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
     )
 
     @auth.required()
@@ -39,6 +41,8 @@ import functools
 import logging
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
+import jwt as pyjwt
+
 try:
     from django.http import (
         HttpRequest,
@@ -56,6 +60,7 @@ except ImportError:  # pragma: no cover
 from .auth_base import OIDCAuth
 from .exceptions import InvalidRequest
 from .schema import IDToken
+from .utils import token_field_matches
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +75,9 @@ class DjangoOIDCAuth(OIDCAuth):
     """Reusable OIDC authentication wrapper for Django async views.
 
     * Use :meth:`required` / :meth:`optional` as view decorators.
-    * Call :meth:`get_urlpatterns` for a list of Django URL patterns
-      with the standard OIDC endpoints.
+    * Call :meth:`get_urlpatterns` for a list of Django URL patterns with the
+      standard OIDC endpoints.  When ``broker_mode=True`` the token view
+      issues broker JWTs and a JWKS view is included automatically.
     """
 
     @staticmethod
@@ -89,7 +95,15 @@ class DjangoOIDCAuth(OIDCAuth):
         """Enforce authentication on a Django async view.
 
         The decorated view receives the validated ``IDToken`` as an
-        extra argument after ``request``::
+        extra argument after ``request``.
+
+        :param claims: Optional claim constraints (passthrough mode only).
+        :param scopes: Space-separated scope names.
+        :returns: Decorator for Django async views.
+
+        Example
+        -------
+        .. code-block:: python
 
             @auth.required()
             async def protected(request, token):
@@ -103,15 +117,30 @@ class DjangoOIDCAuth(OIDCAuth):
             async def wrapper(
                 request: HttpRequest, *args: Any, **kwargs: Any
             ) -> HttpResponse:
-                credentials = self._extract_bearer(request)
-                try:
-                    token = await self._get_token(
-                        credentials,
-                        required_scopes=scope_set or None,
-                        effective_claims=effective_claims,
-                    )
-                except InvalidRequest as exc:
-                    return _error_response(exc.status_code, exc.detail)
+                bearer = self._extract_bearer(request)
+                if self.broker_mode:
+                    if not bearer:
+                        return _error_response(401, "Missing Bearer token.")
+                    try:
+                        broker = await self._ensure_broker_ready()
+                        token = broker.verify(bearer)
+                    except pyjwt.ExpiredSignatureError:
+                        return _error_response(401, "Token has expired.")
+                    except pyjwt.PyJWTError as exc:
+                        return _error_response(401, f"Invalid token: {exc}")
+                    if effective_claims and not token_field_matches(
+                        bearer, claims=effective_claims
+                    ):
+                        return _error_response(403, "Insufficient claims.")
+                else:
+                    try:
+                        token = await self._get_token(
+                            bearer,
+                            required_scopes=scope_set or None,
+                            effective_claims=effective_claims,
+                        )
+                    except InvalidRequest as exc:
+                        return _error_response(exc.status_code, exc.detail)
                 return await fn(request, token, *args, **kwargs)
 
             return wrapper  # type: ignore[return-value]
@@ -126,6 +155,10 @@ class DjangoOIDCAuth(OIDCAuth):
         """Allow anonymous access.
 
         The view receives ``IDToken | None`` as an extra argument.
+
+        :param claims: Optional claim constraints (passthrough mode only).
+        :param scopes: Space-separated scope names.
+        :returns: Decorator for Django async views.
         """
         scope_set = set(s.strip() for s in scopes.split() if s.strip())
         effective_claims = claims if claims is not None else self.config.claims
@@ -135,17 +168,28 @@ class DjangoOIDCAuth(OIDCAuth):
             async def wrapper(
                 request: HttpRequest, *args: Any, **kwargs: Any
             ) -> HttpResponse:
-                credentials = self._extract_bearer(request)
+                bearer = self._extract_bearer(request)
                 token: Optional[IDToken] = None
-                if credentials:
-                    try:
-                        token = await self._get_token(
-                            credentials,
-                            required_scopes=scope_set or None,
-                            effective_claims=effective_claims,
-                        )
-                    except InvalidRequest:
-                        pass
+                if bearer:
+                    if self.broker_mode:
+                        try:
+                            broker = await self._ensure_broker_ready()
+                            token = broker.verify(bearer)
+                            if effective_claims and not token_field_matches(
+                                bearer, claims=effective_claims
+                            ):
+                                token = None
+                        except pyjwt.PyJWTError:
+                            pass
+                    else:
+                        try:
+                            token = await self._get_token(
+                                bearer,
+                                required_scopes=scope_set or None,
+                                effective_claims=effective_claims,
+                            )
+                        except InvalidRequest:
+                            pass
                 return await fn(request, token, *args, **kwargs)
 
             return wrapper  # type: ignore[return-value]
@@ -160,8 +204,19 @@ class DjangoOIDCAuth(OIDCAuth):
         device_flow: Optional[str] = "auth/v2/device",
         logout: Optional[str] = "auth/v2/logout",
         userinfo: Optional[str] = "auth/v2/userinfo",
+        jwks: Optional[str] = "auth/v2/.well-known/jwks.json",
     ) -> List[URLPattern]:
         """Return a list of Django URL patterns for standard OIDC routes.
+
+        :param login: Path for login.
+        :param callback: Path for callback.
+        :param token: Path for token exchange / broker JWT issuance.
+        :param device_flow: Path for starting the device flow.
+        :param logout: Path for logout.
+        :param userinfo: Path for userinfo.
+        :param jwks: Path for JWKS (broker mode only).
+        :returns: List of :class:`django.urls.URLPattern`.
+        :raises ValueError: When ``broker_mode=True`` and ``token`` is falsy.
 
         Usage::
 
@@ -173,6 +228,8 @@ class DjangoOIDCAuth(OIDCAuth):
         Note: route paths should **not** have a leading slash — Django
         convention uses relative paths inside ``include()``.
         """
+        self._validate_broker_config(has_token_endpoint=bool(token))
+
         auth = self
         patterns: List[URLPattern] = []
 
@@ -222,9 +279,7 @@ class DjangoOIDCAuth(OIDCAuth):
                     return _error_response(exc.status_code, exc.detail)
                 return JsonResponse(result.model_dump())
 
-            patterns.append(
-                path(device_flow, device_flow_view, name="oidc-device")
-            )
+            patterns.append(path(device_flow, device_flow_view, name="oidc-device"))
 
         if token:
 
@@ -234,27 +289,46 @@ class DjangoOIDCAuth(OIDCAuth):
                 refresh_token = request.POST.get("refresh-token")
                 device_code = request.POST.get("device-code")
                 code_verifier = request.POST.get("code_verifier")
+                grant_type = request.POST.get("grant_type")
+                subject_token = request.POST.get("subject_token")
                 try:
-                    result = await auth.token(
-                        token,
-                        code=code,
-                        redirect_uri=redirect_uri,
-                        refresh_token=refresh_token,
-                        device_code=device_code,
-                        code_verifier=code_verifier,
-                    )
+                    if auth.broker_mode:
+                        result = await auth.broker_token(
+                            token_endpoint=token,
+                            code=code,
+                            redirect_uri=redirect_uri,
+                            refresh_token=refresh_token,
+                            device_code=device_code,
+                            code_verifier=code_verifier,
+                            grant_type=grant_type,
+                            subject_token=subject_token,
+                        )
+                    else:
+                        result = await auth.token(
+                            token,
+                            code=code,
+                            redirect_uri=redirect_uri,
+                            refresh_token=refresh_token,
+                            device_code=device_code,
+                            code_verifier=code_verifier,
+                        )
                 except InvalidRequest as exc:
                     return _error_response(exc.status_code, exc.detail)
                 return JsonResponse(result.model_dump())
 
             patterns.append(path(token, token_view, name="oidc-token"))
 
+        if jwks and auth.broker_mode:
+
+            async def jwks_view(request: HttpRequest) -> HttpResponse:
+                return JsonResponse(await auth.broker_jwks())
+
+            patterns.append(path(jwks, jwks_view, name="oidc-jwks"))
+
         if logout:
 
             async def logout_view(request: HttpRequest) -> HttpResponse:
-                post_logout_redirect_uri = request.GET.get(
-                    "post_logout_redirect_uri"
-                )
+                post_logout_redirect_uri = request.GET.get("post_logout_redirect_uri")
                 target = await auth.logout(post_logout_redirect_uri)
                 return HttpResponseRedirect(target)
 

@@ -22,3 +22,14 @@ The core is framework independent and can be used directly.
 .. automodule:: py_oidc_auth.utils
    :members:
    :member-order: bysource
+
+Token minting and federation
+============================
+
+.. automodule:: py_oidc_auth.broker.issuer
+   :members: TokenBroker
+   :member-order: bysource
+
+.. automodule:: py_oidc_auth.broker.store
+   :members: InMemoryBrokerStore, MongoDBBrokerStore, SQLAlchemyBrokerStore
+   :member-order: bysource

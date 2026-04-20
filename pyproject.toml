@@ -13,7 +13,6 @@ classifiers = [
                "License :: OSI Approved :: BSD License",
                "Operating System :: POSIX :: Linux",
                "Programming Language :: Python :: 3",
-               "Programming Language :: Python :: 3.9",
                "Programming Language :: Python :: 3.10",
                "Programming Language :: Python :: 3.11",
                "Programming Language :: Python :: 3.12",
@@ -31,10 +30,11 @@ classifiers = [
                "Environment :: Web Environment",
 ]
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "httpx",
     "pydantic",
+    "platformdirs",
     "PyJWT[crypto]",
     "typing_extensions",
 ]
@@ -54,6 +54,7 @@ dev = ["tox", "cryptography", "uvicorn", "py-oidc-auth[all,tests]"]
 all = ["py-oidc-auth[fastapi,flask,quart,tornado,litestar,django]"]
 tests = ["pytest",
          "pytest-env",
+         "pymongo",
          "httpx",
          "mock",
          "pytest-mock",
@@ -61,6 +62,10 @@ tests = ["pytest",
          "pytest-asyncio",
          "requests",
          "uvicorn",
+         "sqlalchemy[asyncio]",
+         "aiosqlite",
+         "asyncpg",
+         "aiomysql",
          ]
 docs = ["sphinx-execute-code-python3",
         "sphinx-code-tabs",

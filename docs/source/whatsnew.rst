@@ -3,6 +3,13 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2604.2.0
+---------
+* implemented token exchange flow
+* implemented token broker / minting
+* implemented token federation via trusted issuer
+
+
 v2604.1.0
 ---------
 * enable overriding of `jwks_uri` and `issuer`.

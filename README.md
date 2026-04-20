@@ -16,6 +16,7 @@ It provides
 * a framework independent async core: `OIDCAuth`
 * framework adapters that expose common auth endpoints
 * simple `required()` and `optional()` helpers to protect routes
+* token minting/brokering and token federation
 
 ## What it does
 
@@ -96,7 +97,7 @@ conda install -c conda-forge py-oidc-auth-fastapi
 conda install -c conda-forge py-oidc-auth-flask
 conda install -c conda-forge py-oidc-auth-quart
 conda install -c conda-forge py-oidc-auth-tornado
-conda install -c conda-forge py-oidc-auth-litestart
+conda install -c conda-forge py-oidc-auth-litestar
 conda install -c conda-forge py-oidc-auth-django
 ```
 
@@ -122,7 +123,7 @@ Each adapter subclasses `OIDCAuth` and adds:
 
 ## Default endpoints
 
-Adapters can expose these paths (customizable and individually disableable):
+Adapters can expose these paths (customizable and individually disabled):
 
 * `GET  /auth/v2/login`
 * `GET  /auth/v2/callback`
@@ -130,6 +131,7 @@ Adapters can expose these paths (customizable and individually disableable):
 * `POST /auth/v2/device`
 * `GET  /auth/v2/logout`
 * `GET  /auth/v2/userinfo`
+* `GET  /auth/v2/.well-known/jwks.json`
 
 ## Quick start
 
@@ -142,6 +144,10 @@ auth = ...(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 ```
 
@@ -161,6 +167,10 @@ auth = FastApiOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 app.include_router(auth.create_auth_router(prefix="/api"))
@@ -170,7 +180,7 @@ async def me(token: IDToken = auth.required()) -> Dict[str, str]:
     return {"sub": token.sub}
 
 @app.get("/feed")
-async def feed(token: Optional[IDToken] = auth.optional()> Dict[str, str]:
+async def feed(token: Optional[IDToken] = auth.optional() -> Dict[str, str]:
     if token is None:
        message = "Welcome guest"
     else:
@@ -192,6 +202,10 @@ auth = FlaskOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -216,6 +230,10 @@ auth = QuartOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 app.register_blueprint(auth.create_auth_blueprint(prefix="/api"))
@@ -232,7 +250,7 @@ Decorator style:
 
 ```python
 from django.http import HttpRequest, JsonResponse
-from django.urls import path
+from django.urls import include, path
 from py_oidc_auth import DjangoOIDCAuth, IDToken
 
 auth = DjangoOIDCAuth(
@@ -241,6 +259,10 @@ auth = DjangoOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 @auth.required()
@@ -248,7 +270,7 @@ async def protected_view(request: HttpRequest, token: IDToken) -> JsonResponse:
     return JsonResponse({"sub": token.sub})
 
 urlpatterns = [
-    *auth.get_urlpatterns(prefix="api"),
+    path("api/", include(auth.get_urlpatterns())),
     path("protected/", protected_view),
 ]
 ```
@@ -258,6 +280,7 @@ Routes only:
 ```python
 urlpatterns = [
     *auth.get_urlpatterns(prefix="api"),
+    path("api/", include(...))
 ]
 ```
 
@@ -274,6 +297,10 @@ auth = TornadoOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 class ProtectedHandler(tornado.web.RequestHandler):
@@ -283,7 +310,7 @@ class ProtectedHandler(tornado.web.RequestHandler):
 
 def make_app():
     return tornado.web.Application(
-        auth.get_handlers(prefix="/api") + [
+        auth.get_auth_routes(prefix="/api") + [
             (r"/protected", ProtectedHandler),
         ]
     )
@@ -302,6 +329,10 @@ auth = LitestarOIDCAuth(
     discovery_url="https://idp.example.org/realms/demo/.well-known/openid-configuration",
     scopes="myscope profile email",
     audience="my-aud",
+    broker_mode=True,
+    broker_store_url="postgresql+asyncpg://user:pw@db/myapp",
+    broker_audience="myapp-api",
+    trusted_issuers=["https://other-instance.example.org"],
 )
 
 @get("/protected")
@@ -312,7 +343,7 @@ async def protected(token: IDToken) -> Dict[str, str]:
 app = Litestar(
     route_handlers=[
         protected,
-        *auth.get_route_handlers(prefix="/api"),
+        *auth.create_auth_route(prefix="/api"),
     ]
 )
 ```
@@ -332,6 +363,14 @@ FastApi Example:
 def admin(token: IDToken) -> Dict[str, str]:
     return {"sub": token.sub}
 ```
+
+
+## Token minting and federation
+The `broker_mode=True` option allows for the creation of minting of application
+specific tokens rather than passing tokens from the Identity Provider.
+
+Token minting also allows for token federation where multiple applications can
+be configured to trust each others tokens.
 
 ## Related
 
