@@ -298,7 +298,7 @@ custom routes to it, and include it in your app:
         .. code-block:: python
 
            from django.http import HttpRequest, JsonResponse
-           from django.urls import path
+           from django.urls import include, path
            from py_oidc_auth import DjangoOIDCAuth, IDToken
 
            auth = DjangoOIDCAuth(
@@ -322,8 +322,7 @@ custom routes to it, and include it in your app:
                return JsonResponse({"sub": token.sub})
 
            urlpatterns = [
-               \*auth.get_urlpatterns(),
-               path("auth/v2/auth-ports", auth_ports),
+               path("api/", include(auth.get_urlpatterns())),
                path("protected/", protected_view),
            ]
 
@@ -433,13 +432,13 @@ be configured to trust each others tokens.
 In broker mode the Identity Provider Token must be stored securely server site.
 You can choose from a MongoDB, SQLiteDB, PostGresDB or a MySQL/MariaDB. To
 configure the token storage you can either use a connection string or create
-a :class:`py_oidc.broker.store.BrokerStore` class from your own Database storage
+a :class:`py_oidc_auth.broker.store.BrokerStore` class from your own Database storage
 object (flask  example):
 
 .. code-block:: python
 
     from pymongo import AsyncMongoClient
-    from py_oidc_auth import MongoDBBrokerStore, LitestarOIDCAuth
+    from py_oidc_auth import MongoDBBrokerStore, FlaskOIDCAuth
     mongo_client = AsyncMongoClient("mongodb://myser:mypass@host")
     auth =  FlaskOIDCAuth(
                 ...,

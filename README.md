@@ -97,7 +97,7 @@ conda install -c conda-forge py-oidc-auth-fastapi
 conda install -c conda-forge py-oidc-auth-flask
 conda install -c conda-forge py-oidc-auth-quart
 conda install -c conda-forge py-oidc-auth-tornado
-conda install -c conda-forge py-oidc-auth-litestart
+conda install -c conda-forge py-oidc-auth-litestar
 conda install -c conda-forge py-oidc-auth-django
 ```
 
@@ -123,7 +123,7 @@ Each adapter subclasses `OIDCAuth` and adds:
 
 ## Default endpoints
 
-Adapters can expose these paths (customizable and individually disableable):
+Adapters can expose these paths (customizable and individually disabled):
 
 * `GET  /auth/v2/login`
 * `GET  /auth/v2/callback`
@@ -131,6 +131,7 @@ Adapters can expose these paths (customizable and individually disableable):
 * `POST /auth/v2/device`
 * `GET  /auth/v2/logout`
 * `GET  /auth/v2/userinfo`
+* `GET  /auth/v2/.well-known/jwks.json`
 
 ## Quick start
 
@@ -179,7 +180,7 @@ async def me(token: IDToken = auth.required()) -> Dict[str, str]:
     return {"sub": token.sub}
 
 @app.get("/feed")
-async def feed(token: Optional[IDToken] = auth.optional()> Dict[str, str]:
+async def feed(token: Optional[IDToken] = auth.optional() -> Dict[str, str]:
     if token is None:
        message = "Welcome guest"
     else:
@@ -249,7 +250,7 @@ Decorator style:
 
 ```python
 from django.http import HttpRequest, JsonResponse
-from django.urls import path
+from django.urls import include, path
 from py_oidc_auth import DjangoOIDCAuth, IDToken
 
 auth = DjangoOIDCAuth(
@@ -269,7 +270,7 @@ async def protected_view(request: HttpRequest, token: IDToken) -> JsonResponse:
     return JsonResponse({"sub": token.sub})
 
 urlpatterns = [
-    *auth.get_urlpatterns(prefix="api"),
+    path("api/", include(auth.get_urlpatterns())),
     path("protected/", protected_view),
 ]
 ```
@@ -279,6 +280,7 @@ Routes only:
 ```python
 urlpatterns = [
     *auth.get_urlpatterns(prefix="api"),
+    path("api/", include(...))
 ]
 ```
 
@@ -308,7 +310,7 @@ class ProtectedHandler(tornado.web.RequestHandler):
 
 def make_app():
     return tornado.web.Application(
-        auth.get_handlers(prefix="/api") + [
+        auth.get_auth_routes(prefix="/api") + [
             (r"/protected", ProtectedHandler),
         ]
     )
@@ -341,7 +343,7 @@ async def protected(token: IDToken) -> Dict[str, str]:
 app = Litestar(
     route_handlers=[
         protected,
-        *auth.get_route_handlers(prefix="/api"),
+        *auth.create_auth_route(prefix="/api"),
     ]
 )
 ```
