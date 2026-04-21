@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2604.2.1
+---------
+* pull sqlalchemy and aiosqlit as default dependency
+
 v2604.2.0
 ---------
 * implemented token exchange flow
