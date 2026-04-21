@@ -55,6 +55,19 @@ import platformdirs
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    MetaData,
+    String,
+    Table,
+    Text,
+    event,
+    select,
+)
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import create_async_engine
 from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
@@ -460,13 +473,12 @@ class SQLAlchemyBrokerStore(BrokerStore):
     :param db: A pre-existing :class:`sqlalchemy.engine`
                instance.  Use this to share an existing client.  Takes precedence
                over ``url``.
-    Requires ``sqlalchemy`` and an async driver:
+    Requires an ``sqlalchemy`` async driver:
 
     .. code-block:: shell
 
-        pip install sqlalchemy[asyncio] aiosqlite       # SQLite
-        pip install sqlalchemy[asyncio] asyncpg         # PostgreSQL
-        pip install sqlalchemy[asyncio] aiomysql        # MySQL
+        pip install asyncpg         # PostgreSQL
+        pip install aiomysql        # MySQL
 
     **SQLite specifics:**
 
@@ -487,22 +499,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
     def __init__(
         self, url: Optional[str] = None, db: Optional["AsyncEngine"] = None
     ) -> None:
-        try:
-            from sqlalchemy import (
-                Column,
-                DateTime,
-                Index,
-                MetaData,
-                String,
-                Table,
-                Text,
-            )
-            from sqlalchemy.ext.asyncio import create_async_engine
-        except ImportError as exc:
-            raise ImportError(
-                "SQLAlchemyBrokerStore requires 'sqlalchemy'. "
-                "Install with: pip install sqlalchemy[asyncio]"
-            ) from exc
 
         if db is not None:
             self._engine = db
@@ -560,8 +556,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
             if self._setup_done:
                 return
 
-            from sqlalchemy import event
-
             if self._is_sqlite:
                 event.listen(
                     self._engine.sync_engine,
@@ -604,9 +598,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
         ``IntegrityError`` from the UNIQUE primary key constraint; the loser
         re-reads the winner's key.
         """
-        from sqlalchemy import select
-        from sqlalchemy.exc import IntegrityError
-
         async with self._engine.connect() as conn:
             row = (
                 await conn.execute(
@@ -653,8 +644,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
         :param refresh_token: IDP refresh token to store.
         :param expires_at: Expiry as a Unix timestamp.
         """
-        from sqlalchemy.exc import IntegrityError
-
         expires_dt = datetime.fromtimestamp(expires_at, tz=timezone.utc)
         async with self._engine.begin() as conn:
             try:
@@ -683,8 +672,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
 
         :param jti: JWT ID to look up.
         """
-        from sqlalchemy import select
-
         now = datetime.now(timezone.utc)
         async with self._engine.connect() as conn:
             row = (
@@ -723,8 +710,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
         :param issuer_url: Canonical URL of the peer instance.
         :param jwks: JWKS document from the peer.
         """
-        from sqlalchemy.exc import IntegrityError
-
         jwks_json = json.dumps(jwks)
         now = datetime.now(timezone.utc)
         async with self._engine.begin() as conn:
@@ -748,8 +733,6 @@ class SQLAlchemyBrokerStore(BrokerStore):
 
         :returns: List of ``(issuer_url, jwks)`` tuples.
         """
-        from sqlalchemy import select
-
         result: list[tuple[str, JWKSDict]] = []
         async with self._engine.connect() as conn:
             rows = await conn.execute(

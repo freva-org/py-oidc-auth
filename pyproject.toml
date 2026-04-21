@@ -32,10 +32,12 @@ classifiers = [
 dynamic = ["version"]
 requires-python = ">=3.10"
 dependencies = [
+    "aiosqlite",
     "httpx",
     "pydantic",
     "platformdirs",
     "PyJWT[crypto]",
+    "sqlalchemy",
     "typing_extensions",
 ]
 [project.urls]
@@ -62,8 +64,6 @@ tests = ["pytest",
          "pytest-asyncio",
          "requests",
          "uvicorn",
-         "sqlalchemy[asyncio]",
-         "aiosqlite",
          "asyncpg",
          "aiomysql",
          ]
