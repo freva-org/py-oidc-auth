@@ -520,26 +520,18 @@ class OIDCAuth:
         if not code or not state:
             raise InvalidRequest(400, detail="Missing code or state")
         try:
-            _state_token, redirect_uri, code_verifier = state.split("|", 2)
+            _, redirect_uri, code_verifier = state.split("|", 2)
         except ValueError:
             raise InvalidRequest(400, detail="Invalid state format")
 
-        data: Dict[str, str] = {
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": redirect_uri,
-            "code_verifier": code_verifier,
-        }
-        headers: Dict[str, str] = {}
-        _set_request_header(
-            self.config.client_id, self.config.client_secret, data, headers
+        method = self.broker_token if self.broker_mode else self.token
+        token = await method(
+            redirect_uri,
+            code=code,
+            redirect_uri=redirect_uri,
+            code_verifier=code_verifier,
         )
-        return await self.make_oidc_request(
-            "POST",
-            "token_endpoint",
-            data={k: v for k, v in data.items() if v},
-            headers=headers,
-        )
+        return token.model_dump()
 
     async def device_flow(self) -> DeviceStartResponse:
         """Start the OAuth 2 device authorization flow.
