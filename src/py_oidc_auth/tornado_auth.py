@@ -393,13 +393,8 @@ class TornadoOIDCAuth(OIDCAuth):
         if userinfo:
 
             class UserinfoHandler(_BaseHandler):
-                async def get(self) -> None:
-                    credentials = TornadoOIDCAuth._extract_bearer(self)
-                    try:
-                        token_obj = await self.oidc_auth._get_token(credentials)
-                    except InvalidRequest as exc:
-                        _write_error(self, exc.status_code, exc.detail)
-                        return
+                @auth.required()
+                async def get(self, token_obj: IDToken) -> None:
                     try:
                         result = await self.oidc_auth.userinfo(
                             token_obj, dict(self.request.headers)

@@ -351,6 +351,7 @@ class FastApiOIDCAuth(OIDCAuth):
         """
         router = APIRouter(prefix=prefix, tags=tags or ["Authentication"])
         idp_dependency = self._create_idp_dependency()
+        broker_dependency = self._create_broker_dependency()
         _login_func = self.login
         _callback_func = self.callback
         _deviceflow_func = self.device_flow
@@ -566,10 +567,11 @@ class FastApiOIDCAuth(OIDCAuth):
                 return RedirectResponse(await _logout_func(post_logout_redirect_uri))
 
         if userinfo:
+            _userinfo_dep = broker_dependency if self.broker_mode else idp_dependency
 
             @router.get(userinfo)
             async def _userinfo(
-                id_token: IDToken = Security(idp_dependency),
+                id_token: IDToken = Security(_userinfo_dep),
                 request: Request = Required,
             ) -> UserInfo:
                 """Return user profile information for the current request."""

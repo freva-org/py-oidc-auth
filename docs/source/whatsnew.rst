@@ -3,6 +3,10 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2604.2.2
+---------
+* fixed `userinfo` endpoint pass through bug.
+
 v2604.2.1
 ---------
 * pull sqlalchemy and aiosqlit as default dependency
