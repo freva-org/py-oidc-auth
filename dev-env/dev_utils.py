@@ -188,13 +188,12 @@ def _create_fastapi_app() -> "FastAPI":
         description="Test auth server",
         lifespan=lifespan,
     )
-
     auth = FastApiOIDCAuth(
         discovery_url=os.getenv("OIDC_DISCOVERY_URL"),
         client_id=os.getenv("OIDC_CLIENT_ID"),
         client_secret=os.getenv("OIDC_CLIENT_SECRET") or None,
         scopes=os.getenv("OIDC_SCOPES", "openid profile email"),
-        broker_mode=os.getenv("OIDC_BROKER_MODE"),
+        broker_mode=bool(int(os.getenv("OIDC_BROKER_MODE"))),
     )
     app.include_router(auth.create_auth_router(prefix="/api/test"))
     claims = string_to_dict(os.getenv("OIDC_ADMIN_CLAIM", ""))
