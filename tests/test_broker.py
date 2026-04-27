@@ -1395,9 +1395,6 @@ class TestMongoDBBrokerStore:
 
         from py_oidc_auth.broker.store import MongoDBBrokerStore
 
-        real_import = (
-            __builtins__.__import__ if hasattr(__builtins__, "__import__") else None
-        )  # type: ignore[union-attr]
         with patch.dict(sys.modules, {"pymongo": None}):
             with pytest.raises((ImportError, TypeError)):
                 MongoDBBrokerStore(url="mongodb://localhost/db")
