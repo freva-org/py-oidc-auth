@@ -49,7 +49,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 import platformdirs
 from cryptography.hazmat.primitives import serialization
@@ -71,7 +71,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
+    from pymongo.asynchronous.collection import AsyncCollection
     from pymongo.asynchronous.database import AsyncDatabase
+    from pymongo.typings import _DocumentType
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 # ---------------------------------------------------------------------------
@@ -160,6 +162,7 @@ class BrokerStore(abc.ABC):
         sub: str,
         refresh_token: str,
         expires_at: int,
+        user_info: str = "",
     ) -> None:
         """Persist or replace an IDP refresh-token session.
 
@@ -167,10 +170,11 @@ class BrokerStore(abc.ABC):
         :param sub: Subject identifier.
         :param refresh_token: IDP refresh token to store.
         :param expires_at: Expiry as a Unix timestamp.
+        :param user_info json.dump of the IDP userinfo request.
         """
 
     @abc.abstractmethod
-    async def get_session(self, jti: str) -> Optional[tuple[str, str]]:
+    async def get_session(self, jti: str) -> Dict[str, str]:
         """Return ``(sub, refresh_token)`` or ``None`` if absent or expired.
 
         :param jti: JWT ID to look up.
@@ -225,12 +229,19 @@ class BrokerStore(abc.ABC):
 
 
 class _SessionEntry:
-    __slots__ = ("sub", "refresh_token", "expires_at")
+    __slots__ = ("sub", "refresh_token", "expires_at", "user_info")
 
-    def __init__(self, sub: str, refresh_token: str, expires_at: int) -> None:
+    def __init__(
+        self, sub: str, refresh_token: str, expires_at: int, user_info: str = ""
+    ) -> None:
         self.sub = sub
         self.refresh_token = refresh_token
         self.expires_at = expires_at
+        self.user_info = user_info
+
+    def to_dict(self) -> Dict[str, str]:
+        """Convert a session entry to a payload dict."""
+        return {s: getattr(self, s, "") for s in self.__slots__}
 
 
 class InMemoryBrokerStore(BrokerStore):
@@ -264,6 +275,7 @@ class InMemoryBrokerStore(BrokerStore):
         sub: str,
         refresh_token: str,
         expires_at: int,
+        user_info: str = "",
     ) -> None:
         """Persist or replace an IDP refresh-token session.
 
@@ -271,22 +283,24 @@ class InMemoryBrokerStore(BrokerStore):
         :param sub: Subject identifier.
         :param refresh_token: IDP refresh token to store.
         :param expires_at: Expiry as a Unix timestamp.
+        :param user_info json.dump of the IDP userinfo request.
         """
-        self._sessions[jti] = _SessionEntry(sub, refresh_token, expires_at)
+        self._sessions[jti] = _SessionEntry(sub, refresh_token, expires_at, user_info)
 
-    async def get_session(self, jti: str) -> Optional[tuple[str, str]]:
-        """Return ``(sub, refresh_token)`` or ``None`` if absent or expired.
+    async def get_session(self, jti: str) -> Dict[str, str]:
+        """Get the complete content of the a database entry.
 
-        :param jti: JWT ID to look up.
+        :param jti: JWT ID to lookup
+        :returns: All entries attached to this jti, if any.
         """
         entry = self._sessions.get(jti)
         if entry is None:
-            return None
+            return {}
         now = int(datetime.now(timezone.utc).timestamp())
         if entry.expires_at < now:
             del self._sessions[jti]
-            return None
-        return entry.sub, entry.refresh_token
+            return {}
+        return entry.to_dict()
 
     async def delete_session(self, jti: str) -> None:
         """Remove a session (token rotation or logout).
@@ -340,7 +354,7 @@ class MongoDBBrokerStore(BrokerStore):
     def __init__(
         self,
         url: Optional[str] = None,
-        db: Optional["AsyncDatabase[dict[str, object]]"] = None,
+        db: Optional["AsyncDatabase[_DocumentType]"] = None,
     ) -> None:
         try:
             from pymongo import AsyncMongoClient
@@ -355,7 +369,7 @@ class MongoDBBrokerStore(BrokerStore):
         self._setup_done = False
 
     @property
-    def _sessions(self) -> object:
+    def _sessions(self) -> "AsyncCollection[_DocumentType]":
         return self._db["broker_sessions"]
 
     @property
@@ -366,7 +380,7 @@ class MongoDBBrokerStore(BrokerStore):
         """Create mongoDB indexes."""
         if self._setup_done:
             return
-        await self._sessions.create_index(  # type: ignore[attr-defined]
+        await self._sessions.create_index(
             [("expires_at", 1)],
             expireAfterSeconds=0,
             name="sessions_ttl",
@@ -394,6 +408,7 @@ class MongoDBBrokerStore(BrokerStore):
         sub: str,
         refresh_token: str,
         expires_at: int,
+        user_info: str = "",
     ) -> None:
         """Persist or replace an IDP refresh-token session.
 
@@ -401,34 +416,35 @@ class MongoDBBrokerStore(BrokerStore):
         :param sub: Subject identifier.
         :param refresh_token: IDP refresh token to store.
         :param expires_at: Expiry as a Unix timestamp.
+        :param user_info json.dump of the IDP userinfo request.
         """
-        await self._sessions.replace_one(  # type: ignore[attr-defined]
+        await self._sessions.replace_one(
             {"_id": jti},
             {
                 "_id": jti,
                 "sub": sub,
                 "refresh_token": refresh_token,
+                "user_info": user_info,
                 "expires_at": datetime.fromtimestamp(expires_at, tz=timezone.utc),
             },
             upsert=True,
         )
 
-    async def get_session(self, jti: str) -> Optional[tuple[str, str]]:
+    async def get_session(self, jti: str) -> Dict[str, str]:
         """Return ``(sub, refresh_token)`` or ``None`` if absent or expired.
 
         :param jti: JWT ID to look up.
         """
-        doc = await self._sessions.find_one({"_id": jti})  # type: ignore[attr-defined]
-        if doc is None:
-            return None
-        return str(doc["sub"]), str(doc["refresh_token"])
+        doc: Optional[Dict[str, str]] = await self._sessions.find_one({"_id": jti})
+        # types: ignore[attr-defined]
+        return doc or {}
 
     async def delete_session(self, jti: str) -> None:
         """Remove a session (token rotation or logout).
 
         :param jti: JWT ID to remove.
         """
-        await self._sessions.delete_one({"_id": jti})  # type: ignore[attr-defined]
+        await self._sessions.delete_one({"_id": jti})
 
     async def save_peer_jwks(self, issuer_url: str, jwks: JWKSDict) -> None:
         """Persist peer public keys for cross-instance federation.
@@ -519,6 +535,7 @@ class SQLAlchemyBrokerStore(BrokerStore):
             Column("jti", String(36), primary_key=True),
             Column("sub", String(255), nullable=False),
             Column("refresh_token", Text, nullable=False),
+            Column("user_info", Text, nullable=False),
             Column(
                 "expires_at",
                 DateTime(timezone=True),
@@ -636,6 +653,7 @@ class SQLAlchemyBrokerStore(BrokerStore):
         sub: str,
         refresh_token: str,
         expires_at: int,
+        user_info: str = "",
     ) -> None:
         """Persist or replace an IDP refresh-token session.
 
@@ -643,6 +661,7 @@ class SQLAlchemyBrokerStore(BrokerStore):
         :param sub: Subject identifier.
         :param refresh_token: IDP refresh token to store.
         :param expires_at: Expiry as a Unix timestamp.
+        :param user_info json.dump of the IDP userinfo request.
         """
         expires_dt = datetime.fromtimestamp(expires_at, tz=timezone.utc)
         async with self._engine.begin() as conn:
@@ -653,6 +672,7 @@ class SQLAlchemyBrokerStore(BrokerStore):
                         sub=sub,
                         refresh_token=refresh_token,
                         expires_at=expires_dt,
+                        user_info=user_info,
                     )
                 )
             except IntegrityError:
@@ -664,10 +684,11 @@ class SQLAlchemyBrokerStore(BrokerStore):
                         sub=sub,
                         refresh_token=refresh_token,
                         expires_at=expires_dt,
+                        user_info=user_info,
                     )
                 )
 
-    async def get_session(self, jti: str) -> Optional[tuple[str, str]]:
+    async def get_session(self, jti: str) -> Dict[str, str]:
         """Return ``(sub, refresh_token)`` or ``None`` if absent or expired.
 
         :param jti: JWT ID to look up.
@@ -685,14 +706,14 @@ class SQLAlchemyBrokerStore(BrokerStore):
             ).first()
 
         if row is None:
-            return None
+            return {}
         expires_at = (
             row[2].replace(tzinfo=timezone.utc) if row[2].tzinfo is None else row[2]
         )
         if expires_at < now:
             await self.delete_session(jti)
-            return None
-        return str(row[0]), str(row[1])
+            return {}
+        return _SessionEntry(*row).to_dict()
 
     async def delete_session(self, jti: str) -> None:
         """Remove a session (token rotation or logout).

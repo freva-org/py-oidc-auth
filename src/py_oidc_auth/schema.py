@@ -17,6 +17,7 @@ PayloadContent = Optional[Union[str, int, float, bool]]
 Payload = Optional[
     Union[Dict[str, "PayloadContent"], List["PayloadContent"], "PayloadContent"]
 ]
+FlatPayload = Union[PayloadContent, List[PayloadContent]]
 
 PromptField = Literal["none", "login", "consent", "select_account"]
 

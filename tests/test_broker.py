@@ -22,7 +22,7 @@ import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -32,9 +32,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from py_oidc_auth.broker.issuer import (
     GRANT_TYPE_TOKEN_EXCHANGE,
-    TOKEN_TYPE_ACCESS,
     TokenBroker,
-    _PEER_REFRESH_COOLDOWN,
 )
 from py_oidc_auth.broker.store import (
     BrokerStore,
@@ -45,7 +43,6 @@ from py_oidc_auth.broker.store import (
     create_broker_store,
 )
 from py_oidc_auth.schema import IDToken, Token
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,6 +56,7 @@ def _make_peer_broker(issuer_url: str = "https://peer.example.org") -> TokenBrok
     broker = TokenBroker(store=store, issuer=issuer_url, audience="test-api")
     # Wire up private key directly so setup() is not needed
     from cryptography.hazmat.primitives import serialization
+
     broker._private_key = serialization.load_pem_private_key(
         store._signing_key.encode(), password=None
     )
@@ -69,6 +67,7 @@ def _make_peer_broker(issuer_url: str = "https://peer.example.org") -> TokenBrok
 def _generate_pem() -> str:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     from cryptography.hazmat.primitives import serialization
+
     return key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.TraditionalOpenSSL,
@@ -201,6 +200,7 @@ class TestCreateBrokerStore:
 
     def test_mongodb(self) -> None:
         from py_oidc_auth.broker.store import MongoDBBrokerStore
+
         url = "mongodb://localhost/mydb"
         # MongoDBBrokerStore requires pymongo — skip if not installed
         pytest.importorskip("pymongo")
@@ -237,23 +237,25 @@ class TestInMemoryBrokerStore:
         await store.save_session(jti, "janedoe", "refresh-xyz", expires_at)
 
         result = await store.get_session(jti)
-        assert result == ("janedoe", "refresh-xyz")
+        assert isinstance(result, dict)
+        assert result.get("sub") == "janedoe"
+        assert result.get("refresh_token") == "refresh-xyz"
 
         await store.delete_session(jti)
-        assert await store.get_session(jti) is None
+        assert await store.get_session(jti) == {}
 
     @pytest.mark.asyncio
-    async def test_get_session_returns_none_for_unknown(self) -> None:
+    async def test_get_session_returns_empty_dict_for_unknown(self) -> None:
         store = InMemoryBrokerStore()
-        assert await store.get_session("nonexistent") is None
+        assert await store.get_session("nonexistent") == {}
 
     @pytest.mark.asyncio
-    async def test_session_expired_returns_none(self) -> None:
+    async def test_session_expired_returns_empty_dict(self) -> None:
         store = InMemoryBrokerStore()
         jti = str(uuid.uuid4())
         past = int((datetime.now(timezone.utc) - timedelta(seconds=1)).timestamp())
         await store.save_session(jti, "user", "token", past)
-        assert await store.get_session(jti) is None
+        assert await store.get_session(jti) == {}
         # Also confirm it was cleaned up
         assert jti not in store._sessions
 
@@ -265,7 +267,11 @@ class TestInMemoryBrokerStore:
     @pytest.mark.asyncio
     async def test_peer_jwks_save_and_load(self) -> None:
         store = InMemoryBrokerStore()
-        jwks = JWKSDict(keys=[JWKDict(kty="RSA", n="abc", e="AQAB", kid="k1", use="sig", alg="RS256")])
+        jwks = JWKSDict(
+            keys=[
+                JWKDict(kty="RSA", n="abc", e="AQAB", kid="k1", use="sig", alg="RS256")
+            ]
+        )
         await store.save_peer_jwks("https://peer.example.org", jwks)
 
         result = await store.load_all_peer_jwks()
@@ -315,10 +321,12 @@ class TestSQLAlchemyBrokerStore:
         await store.save_session(jti, "user", "refresh", expires_at)
 
         result = await store.get_session(jti)
-        assert result == ("user", "refresh")
+        assert isinstance(result, dict)
+        assert result.get("sub") == "user"
+        assert result.get("refresh_token") == "refresh"
 
         await store.delete_session(jti)
-        assert await store.get_session(jti) is None
+        assert await store.get_session(jti) == {}
 
     @pytest.mark.asyncio
     async def test_session_update_on_duplicate(self, tmp_path: Any) -> None:
@@ -330,17 +338,17 @@ class TestSQLAlchemyBrokerStore:
         await store.save_session(jti, "user", "refresh-v2", expires_at)
 
         result = await store.get_session(jti)
-        assert result is not None
-        assert result[1] == "refresh-v2"
+        assert result
+        assert result.get("refresh_token") == "refresh-v2"
 
     @pytest.mark.asyncio
-    async def test_get_session_expired_returns_none(self, tmp_path: Any) -> None:
+    async def test_get_session_expired_returns_empty_dict(self, tmp_path: Any) -> None:
         store = SQLAlchemyBrokerStore(url=f"sqlite+aiosqlite:///{tmp_path}/b.sqlite")
         await store.setup()
         jti = str(uuid.uuid4())
         past = int((datetime.now(timezone.utc) - timedelta(seconds=1)).timestamp())
         await store.save_session(jti, "user", "refresh", past)
-        assert await store.get_session(jti) is None
+        assert await store.get_session(jti) == {}
 
     @pytest.mark.asyncio
     async def test_purge_expired(self, tmp_path: Any) -> None:
@@ -356,7 +364,9 @@ class TestSQLAlchemyBrokerStore:
     async def test_peer_jwks_crud(self, tmp_path: Any) -> None:
         store = SQLAlchemyBrokerStore(url=f"sqlite+aiosqlite:///{tmp_path}/b.sqlite")
         await store.setup()
-        jwks = JWKSDict(keys=[JWKDict(kty="RSA", n="n", e="e", kid="k1", use="sig", alg="RS256")])
+        jwks = JWKSDict(
+            keys=[JWKDict(kty="RSA", n="n", e="e", kid="k1", use="sig", alg="RS256")]
+        )
         await store.save_peer_jwks("https://peer.example.org", jwks)
         await store.save_peer_jwks("https://peer.example.org", jwks)  # upsert
 
@@ -377,6 +387,7 @@ class TestSQLAlchemyBrokerStore:
     @pytest.mark.asyncio
     async def test_accepts_existing_engine(self, tmp_path: Any) -> None:
         from sqlalchemy.ext.asyncio import create_async_engine
+
         engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/eng.sqlite")
         store = SQLAlchemyBrokerStore(db=engine)
         assert store._engine is engine
@@ -473,8 +484,12 @@ class TestTokenBrokerMintVerify:
         broker = await _make_ready_broker()
         wrong_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         fake = pyjwt.encode(
-            {"sub": "u", "aud": "test-api", "iss": "https://api.example.org",
-             "exp": int(time.time()) + 3600},
+            {
+                "sub": "u",
+                "aud": "test-api",
+                "iss": "https://api.example.org",
+                "exp": int(time.time()) + 3600,
+            },
             wrong_key,
             algorithm="RS256",
         )
@@ -555,7 +570,9 @@ class TestTokenBrokerFederation:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client
+        ):
             await broker._load_all_peer_keys()
 
         assert peer._key_id() in broker._peer_keys
@@ -577,7 +594,9 @@ class TestTokenBrokerFederation:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client
+        ):
             await broker._load_all_peer_keys()
 
         assert peer._key_id() in broker._peer_keys
@@ -608,7 +627,9 @@ class TestLazyRefresh:
         mock_resp.raise_for_status = MagicMock()
         mock_resp.json.return_value = dict(peer.jwks())
 
-        with patch("py_oidc_auth.broker.issuer.httpx.get", return_value=mock_resp) as mock_get:
+        with patch(
+            "py_oidc_auth.broker.issuer.httpx.get", return_value=mock_resp
+        ) as mock_get:
             broker._maybe_refresh_peer_keys_for(peer_kid)
             mock_get.assert_called_once()
 
@@ -636,8 +657,10 @@ class TestLazyRefresh:
     def test_lazy_refresh_respects_cooldown(self) -> None:
         store = InMemoryBrokerStore()
         broker = TokenBroker(
-            store=store, issuer="https://x.org", audience="a",
-            trusted_issuers=["https://peer.example.org"]
+            store=store,
+            issuer="https://x.org",
+            audience="a",
+            trusted_issuers=["https://peer.example.org"],
         )
         broker._ready = True
         broker._peer_last_refresh["https://peer.example.org"] = time.monotonic()
@@ -650,13 +673,17 @@ class TestLazyRefresh:
         peer_url = "https://peer.example.org"
         store = InMemoryBrokerStore()
         broker = TokenBroker(
-            store=store, issuer="https://x.org", audience="a",
-            trusted_issuers=[peer_url]
+            store=store,
+            issuer="https://x.org",
+            audience="a",
+            trusted_issuers=[peer_url],
         )
         broker._ready = True
         broker._peer_last_refresh.pop(peer_url, None)
 
-        with patch("py_oidc_auth.broker.issuer.httpx.get", side_effect=Exception("timeout")):
+        with patch(
+            "py_oidc_auth.broker.issuer.httpx.get", side_effect=Exception("timeout")
+        ):
             broker._maybe_refresh_peer_keys_for("some-kid")
 
         assert peer_url in broker._peer_last_refresh
@@ -716,6 +743,7 @@ class TestTokenBrokerSessions:
 class TestValidateBrokerConfig:
     def _make_auth(self, broker_mode: bool = False) -> Any:
         from py_oidc_auth import OIDCAuth
+
         return OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -733,6 +761,7 @@ class TestValidateBrokerConfig:
     ) -> None:
         auth = self._make_auth(broker_mode=False)
         import logging
+
         with caplog.at_level(logging.WARNING):
             auth._validate_broker_config(has_token_endpoint=True)
         assert "broker_mode=False" in caplog.text
@@ -755,6 +784,7 @@ class TestEnsureBrokerReady:
     @pytest.mark.asyncio
     async def test_returns_same_broker_on_second_call(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         auth = OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -769,6 +799,7 @@ class TestEnsureBrokerReady:
     @pytest.mark.asyncio
     async def test_uses_broker_store_obj_over_url(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -790,6 +821,7 @@ class TestOIDCAuthBrokerJWKS:
     @pytest.mark.asyncio
     async def test_broker_jwks_returns_dict(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         auth = OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -803,6 +835,7 @@ class TestOIDCAuthBrokerJWKS:
     @pytest.mark.asyncio
     async def test_broker_jwks_raises_without_broker_mode(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         auth = OIDCAuth(client_id="test", discovery_url="http://localhost/oidc")
         with pytest.raises(RuntimeError, match="broker_mode"):
             await auth.broker_jwks()
@@ -817,6 +850,7 @@ class TestOIDCAuthMintAndStore:
     @pytest.mark.asyncio
     async def test_mint_and_store_returns_broker_jwt(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         auth = OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -825,8 +859,14 @@ class TestOIDCAuthMintAndStore:
             broker_audience="test-api",
         )
         idp_token = _fake_idp_token()
-        with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-            with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="janedoe"):
+        with patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        ):
+            with patch(
+                "py_oidc_auth.auth_base.get_username",
+                new_callable=AsyncMock,
+                return_value="janedoe",
+            ):
                 result = await auth.mint_and_store(idp_token, expiry_seconds=3600)
 
         assert result.access_token == result.refresh_token
@@ -837,6 +877,7 @@ class TestOIDCAuthMintAndStore:
     @pytest.mark.asyncio
     async def test_mint_and_store_persists_session(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -845,9 +886,21 @@ class TestOIDCAuthMintAndStore:
             broker_store_obj=store,
         )
         idp_token = _fake_idp_token()
-        with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-            with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
-                result = await auth.mint_and_store(idp_token)
+        with patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        ):
+            with patch.object(
+                auth,
+                "make_oidc_request",
+                new_callable=AsyncMock,
+                return_value={"username": "janedoe", "email": "jane@example.com"},
+            ):
+                with patch(
+                    "py_oidc_auth.auth_base.get_username",
+                    new_callable=AsyncMock,
+                    return_value="u",
+                ):
+                    result = await auth.mint_and_store(idp_token)
 
         decoded = pyjwt.decode(result.access_token, options={"verify_signature": False})
         jti = decoded["jti"]
@@ -855,6 +908,9 @@ class TestOIDCAuthMintAndStore:
         session = await broker.get_session(jti)
         assert session is not None
         assert session[1] == "idp-refresh-xyz"
+        userinfo = await broker.get_user_info(jti)
+        assert isinstance(userinfo, dict)
+        assert userinfo["username"] == "janedoe"
 
 
 # ---------------------------------------------------------------------------
@@ -866,6 +922,7 @@ class TestOIDCAuthBrokerRefresh:
     @pytest.mark.asyncio
     async def test_broker_refresh_rotates_session(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -875,24 +932,44 @@ class TestOIDCAuthBrokerRefresh:
         )
         idp_token = _fake_idp_token()
 
-        with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-            with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
+        with patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        ):
+            with patch(
+                "py_oidc_auth.auth_base.get_username",
+                new_callable=AsyncMock,
+                return_value="u",
+            ):
                 first = await auth.mint_and_store(idp_token)
 
-        with patch.object(auth, "token", new_callable=AsyncMock, return_value=idp_token):
-            with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-                with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
+        with patch.object(
+            auth, "token", new_callable=AsyncMock, return_value=idp_token
+        ):
+            with patch.object(
+                auth,
+                "_get_token",
+                new_callable=AsyncMock,
+                return_value=_fake_idp_claims(),
+            ):
+                with patch(
+                    "py_oidc_auth.auth_base.get_username",
+                    new_callable=AsyncMock,
+                    return_value="u",
+                ):
                     second = await auth.broker_refresh(first.access_token, "/token")
 
         assert second.access_token != first.access_token
         # Old session gone
         broker = await auth._ensure_broker_ready()
-        old_jti = pyjwt.decode(first.access_token, options={"verify_signature": False})["jti"]
+        old_jti = pyjwt.decode(first.access_token, options={"verify_signature": False})[
+            "jti"
+        ]
         assert await broker.get_session(old_jti) is None
 
     @pytest.mark.asyncio
     async def test_broker_refresh_accepts_expired_jwt(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -902,8 +979,14 @@ class TestOIDCAuthBrokerRefresh:
         )
         idp_token = _fake_idp_token()
 
-        with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-            with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
+        with patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        ):
+            with patch(
+                "py_oidc_auth.auth_base.get_username",
+                new_callable=AsyncMock,
+                return_value="u",
+            ):
                 first = await auth.mint_and_store(idp_token)
 
         # Re-sign with past expiry but same jti
@@ -915,9 +998,20 @@ class TestOIDCAuthBrokerRefresh:
             algorithm="RS256",
         )
 
-        with patch.object(auth, "token", new_callable=AsyncMock, return_value=idp_token):
-            with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-                with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
+        with patch.object(
+            auth, "token", new_callable=AsyncMock, return_value=idp_token
+        ):
+            with patch.object(
+                auth,
+                "_get_token",
+                new_callable=AsyncMock,
+                return_value=_fake_idp_claims(),
+            ):
+                with patch(
+                    "py_oidc_auth.auth_base.get_username",
+                    new_callable=AsyncMock,
+                    return_value="u",
+                ):
                     result = await auth.broker_refresh(expired, "/token")
 
         assert result.access_token is not None
@@ -926,6 +1020,7 @@ class TestOIDCAuthBrokerRefresh:
     async def test_broker_refresh_missing_jti_raises(self) -> None:
         from py_oidc_auth import OIDCAuth
         from py_oidc_auth.exceptions import InvalidRequest
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -936,8 +1031,12 @@ class TestOIDCAuthBrokerRefresh:
         broker = await auth._ensure_broker_ready()
         # Token without jti — must use broker.issuer to pass issuer validation
         no_jti = pyjwt.encode(
-            {"sub": "u", "aud": "py-oidc-auth", "iss": broker.issuer,
-             "exp": int(time.time()) + 3600},
+            {
+                "sub": "u",
+                "aud": "py-oidc-auth",
+                "iss": broker.issuer,
+                "exp": int(time.time()) + 3600,
+            },
             broker.private_key,
             algorithm="RS256",
         )
@@ -948,6 +1047,7 @@ class TestOIDCAuthBrokerRefresh:
     async def test_broker_refresh_session_not_found_raises(self) -> None:
         from py_oidc_auth import OIDCAuth
         from py_oidc_auth.exceptions import InvalidRequest
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -965,6 +1065,7 @@ class TestOIDCAuthBrokerRefresh:
     async def test_broker_refresh_invalid_jwt_raises(self) -> None:
         from py_oidc_auth import OIDCAuth
         from py_oidc_auth.exceptions import InvalidRequest
+
         auth = OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -984,6 +1085,7 @@ class TestOIDCAuthBrokerExchange:
     @pytest.mark.asyncio
     async def test_broker_exchange_returns_broker_jwt(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         auth = OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -991,8 +1093,14 @@ class TestOIDCAuthBrokerExchange:
             broker_store_obj=InMemoryBrokerStore(),
             broker_audience="test-api",
         )
-        with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-            with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
+        with patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        ):
+            with patch(
+                "py_oidc_auth.auth_base.get_username",
+                new_callable=AsyncMock,
+                return_value="u",
+            ):
                 result = await auth.broker_exchange("idp-access-token")
 
         decoded = pyjwt.decode(result.access_token, options={"verify_signature": False})
@@ -1001,6 +1109,7 @@ class TestOIDCAuthBrokerExchange:
     @pytest.mark.asyncio
     async def test_broker_exchange_stores_empty_refresh_token(self) -> None:
         from py_oidc_auth import OIDCAuth
+
         store = InMemoryBrokerStore()
         auth = OIDCAuth(
             client_id="test",
@@ -1008,12 +1117,20 @@ class TestOIDCAuthBrokerExchange:
             broker_mode=True,
             broker_store_obj=store,
         )
-        with patch.object(auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()):
-            with patch("py_oidc_auth.auth_base.get_username", new_callable=AsyncMock, return_value="u"):
+        with patch.object(
+            auth, "_get_token", new_callable=AsyncMock, return_value=_fake_idp_claims()
+        ):
+            with patch(
+                "py_oidc_auth.auth_base.get_username",
+                new_callable=AsyncMock,
+                return_value="u",
+            ):
                 result = await auth.broker_exchange("idp-access-token")
 
         broker = await auth._ensure_broker_ready()
-        jti = pyjwt.decode(result.access_token, options={"verify_signature": False})["jti"]
+        jti = pyjwt.decode(result.access_token, options={"verify_signature": False})[
+            "jti"
+        ]
         session = await broker.get_session(jti)
         assert session is not None
         assert session[1] == ""  # no IDP refresh token from plain exchange
@@ -1027,6 +1144,7 @@ class TestOIDCAuthBrokerExchange:
 class TestOIDCAuthBrokerToken:
     def _make_auth(self) -> Any:
         from py_oidc_auth import OIDCAuth
+
         return OIDCAuth(
             client_id="test",
             discovery_url="http://localhost/oidc",
@@ -1055,14 +1173,20 @@ class TestOIDCAuthBrokerToken:
                 token_endpoint="/token",
                 refresh_token="some-refresh",
             )
-            mock_ref.assert_called_once_with(freva_jwt="some-refresh", token_endpoint="/token")
+            mock_ref.assert_called_once_with(
+                freva_jwt="some-refresh", token_endpoint="/token"
+            )
 
     @pytest.mark.asyncio
     async def test_dispatches_to_mint_and_store_for_device_code(self) -> None:
         auth = self._make_auth()
         idp_token = _fake_idp_token()
-        with patch.object(auth, "token", new_callable=AsyncMock, return_value=idp_token):
-            with patch.object(auth, "mint_and_store", new_callable=AsyncMock) as mock_mint:
+        with patch.object(
+            auth, "token", new_callable=AsyncMock, return_value=idp_token
+        ):
+            with patch.object(
+                auth, "mint_and_store", new_callable=AsyncMock
+            ) as mock_mint:
                 mock_mint.return_value = MagicMock(spec=Token)
                 await auth.broker_token(
                     token_endpoint="/token",
@@ -1075,8 +1199,12 @@ class TestOIDCAuthBrokerToken:
     async def test_dispatches_to_mint_and_store_for_auth_code(self) -> None:
         auth = self._make_auth()
         idp_token = _fake_idp_token()
-        with patch.object(auth, "token", new_callable=AsyncMock, return_value=idp_token):
-            with patch.object(auth, "mint_and_store", new_callable=AsyncMock) as mock_mint:
+        with patch.object(
+            auth, "token", new_callable=AsyncMock, return_value=idp_token
+        ):
+            with patch.object(
+                auth, "mint_and_store", new_callable=AsyncMock
+            ) as mock_mint:
                 mock_mint.return_value = MagicMock(spec=Token)
                 await auth.broker_token(
                     token_endpoint="/token",
@@ -1110,7 +1238,9 @@ def _make_mongo_store() -> Any:
     mock_keys.replace_one = AsyncMock()
 
     mock_db.__getitem__ = MagicMock(
-        side_effect=lambda name: mock_sessions if name == "broker_sessions" else mock_keys
+        side_effect=lambda name: (
+            mock_sessions if name == "broker_sessions" else mock_keys
+        )
     )
 
     store = MongoDBBrokerStore(db=mock_db)
@@ -1121,6 +1251,7 @@ class TestMongoDBBrokerStore:
     def test_requires_url_or_db(self) -> None:
         pytest.importorskip("pymongo")
         from py_oidc_auth.broker.store import MongoDBBrokerStore
+
         with pytest.raises(ValueError, match="Either"):
             MongoDBBrokerStore()
 
@@ -1162,16 +1293,16 @@ class TestMongoDBBrokerStore:
         store, _, mock_keys = _make_mongo_store()
         pem = _generate_pem()
         # First find_one returns None (key absent), second returns the created key
-        mock_keys.find_one = AsyncMock(
-            side_effect=[None, {"pem": pem}]
-        )
+        mock_keys.find_one = AsyncMock(side_effect=[None, {"pem": pem}])
         result = await store.load_or_create_signing_key()
         mock_keys.update_one.assert_called_once()
         assert "upsert" in str(mock_keys.update_one.call_args)
         assert result == pem
 
     @pytest.mark.asyncio
-    async def test_load_signing_key_fallback_when_second_find_returns_none(self) -> None:
+    async def test_load_signing_key_fallback_when_second_find_returns_none(
+        self,
+    ) -> None:
         """Covers the `else pem` branch when $setOnInsert wins but re-read fails."""
         pytest.importorskip("pymongo")
         store, _, mock_keys = _make_mongo_store()
@@ -1193,21 +1324,23 @@ class TestMongoDBBrokerStore:
         assert doc["refresh_token"] == "refresh-tok"
 
     @pytest.mark.asyncio
-    async def test_get_session_returns_tuple(self) -> None:
+    async def test_get_session_returns_dict(self) -> None:
         pytest.importorskip("pymongo")
         store, mock_sessions, _ = _make_mongo_store()
         mock_sessions.find_one = AsyncMock(
             return_value={"_id": "jti-1", "sub": "user", "refresh_token": "rt"}
         )
         result = await store.get_session("jti-1")
-        assert result == ("user", "rt")
+        assert isinstance(result, dict)
+        assert result.get("sub") == "user"
+        assert result.get("refresh_token") == "rt"
 
     @pytest.mark.asyncio
     async def test_get_session_returns_none_for_missing(self) -> None:
         pytest.importorskip("pymongo")
         store, mock_sessions, _ = _make_mongo_store()
         mock_sessions.find_one = AsyncMock(return_value=None)
-        assert await store.get_session("nonexistent") is None
+        assert await store.get_session("nonexistent") == {}
 
     @pytest.mark.asyncio
     async def test_delete_session(self) -> None:
@@ -1220,7 +1353,9 @@ class TestMongoDBBrokerStore:
     async def test_save_peer_jwks(self) -> None:
         pytest.importorskip("pymongo")
         store, _, mock_keys = _make_mongo_store()
-        jwks = JWKSDict(keys=[JWKDict(kty="RSA", n="n", e="e", kid="k1", use="sig", alg="RS256")])
+        jwks = JWKSDict(
+            keys=[JWKDict(kty="RSA", n="n", e="e", kid="k1", use="sig", alg="RS256")]
+        )
         await store.save_peer_jwks("https://peer.example.org", jwks)
         mock_keys.replace_one.assert_called_once()
         doc = mock_keys.replace_one.call_args[0][1]
@@ -1257,8 +1392,9 @@ class TestMongoDBBrokerStore:
     def test_raises_import_error_without_pymongo(self) -> None:
         """When pymongo is not installed, ImportError is raised."""
         import sys
+
         from py_oidc_auth.broker.store import MongoDBBrokerStore
-        real_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else None  # type: ignore[union-attr]
+
         with patch.dict(sys.modules, {"pymongo": None}):
             with pytest.raises((ImportError, TypeError)):
                 MongoDBBrokerStore(url="mongodb://localhost/db")
@@ -1400,7 +1536,9 @@ class TestFederationEndToEnd:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client
+        ):
             await local.load_peer_keys()
 
         assert peer._key_id() in local._peer_keys
@@ -1411,6 +1549,7 @@ class TestFederationEndToEnd:
     ) -> None:
         """A failing peer during startup is logged and skipped."""
         import logging
+
         peer_url = "https://peer.example.org"
         local = await _make_ready_broker(trusted_issuers=[peer_url])
 
@@ -1419,7 +1558,9 @@ class TestFederationEndToEnd:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "py_oidc_auth.broker.issuer.httpx.AsyncClient", return_value=mock_client
+        ):
             with caplog.at_level(logging.WARNING):
                 await local._load_all_peer_keys()  # must not raise
 

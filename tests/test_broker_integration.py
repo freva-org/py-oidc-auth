@@ -28,10 +28,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt as pyjwt
 import pytest
 
-from py_oidc_auth.broker.issuer import GRANT_TYPE_TOKEN_EXCHANGE, TOKEN_TYPE_ACCESS
-from py_oidc_auth.broker.store import InMemoryBrokerStore, SQLAlchemyBrokerStore
+from py_oidc_auth.broker.issuer import (
+    GRANT_TYPE_TOKEN_EXCHANGE,
+    TOKEN_TYPE_ACCESS,
+)
+from py_oidc_auth.broker.store import (
+    InMemoryBrokerStore,
+    SQLAlchemyBrokerStore,
+)
 from py_oidc_auth.schema import IDToken, Token
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -107,6 +112,7 @@ class TestFastAPIBrokerIntegration:
     def broker_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from py_oidc_auth import FastApiOIDCAuth
 
         auth = _make_broker_auth(FastApiOIDCAuth)
@@ -300,6 +306,7 @@ class TestFlaskBrokerIntegration:
     @pytest.fixture
     def broker_flask_client(self):
         from flask import Flask, jsonify
+
         from py_oidc_auth import FlaskOIDCAuth
 
         auth = _make_broker_auth(FlaskOIDCAuth)
@@ -453,6 +460,7 @@ class TestQuartBrokerIntegration:
     @pytest.fixture
     def broker_quart_app(self):
         from quart import Quart, jsonify
+
         from py_oidc_auth import QuartOIDCAuth
 
         auth = _make_broker_auth(QuartOIDCAuth)
@@ -615,6 +623,7 @@ class TestLitestarBrokerIntegration:
     def broker_litestar_client(self):
         from litestar import Litestar, get
         from litestar.testing import TestClient as LitestarTestClient
+
         from py_oidc_auth import LitestarOIDCAuth
 
         auth = _make_broker_auth(LitestarOIDCAuth)
@@ -783,6 +792,7 @@ class TestDjangoBrokerIntegration:
         import django
         from django.conf import settings
         from django.http import HttpRequest, JsonResponse
+
         from py_oidc_auth import DjangoOIDCAuth
 
         auth = _make_broker_auth(DjangoOIDCAuth)
@@ -968,6 +978,7 @@ class TestTornadoBrokerIntegration:
     @pytest.fixture
     def broker_tornado_app(self):
         import tornado.web
+
         from py_oidc_auth import TornadoOIDCAuth
 
         auth = _make_broker_auth(TornadoOIDCAuth)
@@ -1029,6 +1040,7 @@ class TestTornadoBrokerIntegration:
         self, app: Any, path: str, body: dict, *, headers: dict = None
     ) -> Any:
         import urllib.parse
+
         import tornado.httpserver
         import tornado.testing
 

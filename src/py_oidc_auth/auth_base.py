@@ -52,6 +52,7 @@ import asyncio
 import base64
 import datetime
 import hashlib
+import json
 import logging
 import secrets
 from typing import Any, Dict, Optional, Set, Union, cast
@@ -744,7 +745,7 @@ class OIDCAuth:
             Authorization: Bearer <access token>
 
         """
-        token_data = {
+        token_data: Dict[str, Payload] = {
             k.lower(): str(v) for (k, v) in dict(id_token).items() if v is not None
         }
         authorization = cast(str, process_payload(header, "authorization"))
@@ -878,13 +879,24 @@ class OIDCAuth:
             idp_token.access_token,
             effective_claims=self.config.claims,
         )
-
+        header = {"authorization": f"Bearer {idp_token.access_token}"}
+        try:
+            user_info = await self.make_oidc_request(
+                "GET",
+                "userinfo_endpoint",
+                headers=header,
+            )
+        except (InvalidRequest, KeyError) as error:
+            logger.warning(
+                "Could not set user_info: %s %s", error, idp_token.access_token
+            )
+            user_info = {}
         username = await get_username(
             current_user=idp_claims,
-            header={"authorization": f"Bearer {idp_token.access_token}"},
             cfg=self.config,
+            header=header,
+            user_info=user_info,
         )
-
         broker_jwt, jti = broker.mint(
             sub=username or idp_claims.sub or "",
             email=idp_claims.email,
@@ -892,12 +904,12 @@ class OIDCAuth:
             preferred_username=username,
             expiry_seconds=expiry_seconds,
         )
-
         await broker.save_session(
             jti=jti,
             sub=idp_claims.sub,
             refresh_token=idp_token.refresh_token,
             expires_at=idp_token.refresh_expires,
+            user_info=json.dumps(user_info),
         )
 
         now = _dt.datetime.now(tz=_dt.timezone.utc)

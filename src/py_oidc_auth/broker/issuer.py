@@ -20,7 +20,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, Optional, cast
 
 import httpx
 import jwt as pyjwt
@@ -34,6 +34,9 @@ from jwt.algorithms import RSAAlgorithm
 from py_oidc_auth.schema import IDToken
 
 from .store import BrokerStore, JWKDict, JWKSDict
+
+if TYPE_CHECKING:
+    from ..schema import Payload
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +335,7 @@ class TokenBroker:
         sub: Optional[str],
         refresh_token: str,
         expires_at: int,
+        user_info: str = "",
     ) -> None:
         """Persist an IDP refresh-token session keyed by ``jti``."""
         await self._store.save_session(
@@ -339,11 +343,21 @@ class TokenBroker:
             sub=sub or "",
             refresh_token=refresh_token,
             expires_at=expires_at,
+            user_info=user_info,
         )
 
     async def get_session(self, jti: str) -> Optional[tuple[str, str]]:
         """Return ``(sub, refresh_token)`` or ``None``."""
-        return await self._store.get_session(jti)
+        session = await self._store.get_session(jti)
+        if session:
+            return session["sub"], session["refresh_token"]
+        return None
+
+    async def get_user_info(self, jti: str) -> Dict[str, "Payload"]:
+        """Get the user_info content."""
+        session = await self._store.get_session(jti)
+        user_info: Dict[str, "Payload"] = json.loads(session.get("user_info") or "{}")
+        return user_info
 
     async def delete_session(self, jti: str) -> None:
         """Remove a session entry."""

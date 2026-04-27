@@ -10,6 +10,7 @@ from py_oidc_auth.exceptions import InvalidRequest
 from py_oidc_auth.schema import UserInfo
 from py_oidc_auth.utils import (
     OIDCConfig,
+    extract_claims,
     get_userinfo,
     get_username,
     process_payload,
@@ -416,3 +417,128 @@ class TestGetUserinfo:
         info = get_userinfo({})
         assert info["username"] == ""
         assert info["email"] == ""
+
+
+class TestExtractClaims:
+    """Tests for extract_claims."""
+
+    NESTED_PAYLOAD = {
+        "provider": {"home": "/home/user", "username": "jdoe"},
+        "sub": "56ee884d-6c7c-467e-88e4-4d2b16ad2fb5",
+        "email_verified": True,
+        "name": "Jane Doe",
+        "preferred_username": "jdoe",
+        "given_name": "Jane",
+        "family_name": "Doe",
+        "email": "jane@example.com",
+    }
+
+    def test_stops_traversing_siblings_after_all_found(self) -> None:
+        """Inner traversal stops after all keys are found in a sibling."""
+        data = {
+            "wrapper": {
+                "first": {"target": "found"},
+                "second": {"decoy": "should not matter"},
+            },
+        }
+        result = extract_claims(data, ["target"])
+        assert result == {"target": "found"}
+
+    def test_extract_from_nested(self) -> None:
+        """Claims inside nested dicts are found."""
+        result = extract_claims(self.NESTED_PAYLOAD, ["username", "home"])
+        assert result == {"username": "jdoe", "home": "/home/user"}
+
+    def test_extract_from_top_level(self) -> None:
+        """Claims at the top level are found."""
+        result = extract_claims(self.NESTED_PAYLOAD, ["email", "sub"])
+        assert result == {
+            "email": "jane@example.com",
+            "sub": "56ee884d-6c7c-467e-88e4-4d2b16ad2fb5",
+        }
+
+    def test_mixed_depth(self) -> None:
+        """Claims from both top level and nested are found in one call."""
+        result = extract_claims(self.NESTED_PAYLOAD, ["username", "email"])
+        assert result == {"username": "jdoe", "email": "jane@example.com"}
+
+    def test_missing_key_returns_partial(self) -> None:
+        """Missing keys are silently omitted from the result."""
+        result = extract_claims(self.NESTED_PAYLOAD, ["username", "nonexistent"])
+        assert result == {"username": "jdoe"}
+
+    def test_all_missing_returns_empty(self) -> None:
+        """Completely absent keys produce an empty dict."""
+        result = extract_claims(self.NESTED_PAYLOAD, ["foo", "bar"])
+        assert result == {}
+
+    def test_empty_keys_returns_empty(self) -> None:
+        """An empty key list produces an empty dict."""
+        result = extract_claims(self.NESTED_PAYLOAD, [])
+        assert result == {}
+
+    def test_empty_data_returns_empty(self) -> None:
+        """Empty input data produces an empty dict."""
+        result = extract_claims({}, ["username"])
+        assert result == {}
+
+    def test_first_occurrence_wins(self) -> None:
+        """When a key appears at multiple levels, the shallowest wins."""
+        data = {
+            "username": "top_level",
+            "nested": {"username": "deep"},
+        }
+        result = extract_claims(data, ["username"])
+        assert result == {"username": "top_level"}
+
+    def test_nested_occurrence_when_top_is_dict(self) -> None:
+        """When the top-level value is a dict, the nested scalar is found."""
+        data = {
+            "wrapper": {"username": "nested_value"},
+            "other": "irrelevant",
+        }
+        result = extract_claims(data, ["username"])
+        assert result == {"username": "nested_value"}
+
+    def test_deeply_nested(self) -> None:
+        """Claims in deeply nested structures are found."""
+        data = {"a": {"b": {"c": {"target": 42}}}}
+        result = extract_claims(data, ["target"])
+        assert result == {"target": 42}
+
+    def test_early_exit_all_found(self) -> None:
+        """Traversal stops once all keys are found."""
+        data = {
+            "first": "a",
+            "second": "b",
+            "deep": {"third": "c", "fourth": "d"},
+        }
+        result = extract_claims(data, ["first", "second"])
+        assert result == {"first": "a", "second": "b"}
+
+    def test_list_values_preserved(self) -> None:
+        """List values are returned as-is, not traversed."""
+        data = {"roles": ["admin", "user"], "name": "Jane"}
+        result = extract_claims(data, ["roles", "name"])
+        assert result == {"roles": ["admin", "user"], "name": "Jane"}
+
+    def test_none_value_preserved(self) -> None:
+        """None values are extracted correctly."""
+        data = {"username": None, "email": "test@example.com"}
+        result = extract_claims(data, ["username"])
+        assert result == {"username": None}
+
+    def test_boolean_value_preserved(self) -> None:
+        """Boolean values are extracted correctly."""
+        result = extract_claims(self.NESTED_PAYLOAD, ["email_verified"])
+        assert result == {"email_verified": True}
+
+    def test_no_nested_claims(self) -> None:
+        """A flat payload without the nested object returns no nested keys."""
+        flat_payload = {
+            "sub": "abc-123",
+            "preferred_username": "external.abc-123",
+            "email": "someone@example.com",
+        }
+        result = extract_claims(flat_payload, ["username", "home"])
+        assert result == {}

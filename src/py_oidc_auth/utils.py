@@ -14,14 +14,14 @@ adapter.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Union, cast
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Union, cast
 
 import httpx
 from pydantic import ValidationError
 from typing_extensions import NotRequired, TypedDict
 
 from .exceptions import InvalidRequest
-from .schema import IDToken, Payload, UserInfo
+from .schema import FlatPayload, IDToken, Payload, UserInfo
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +170,59 @@ def string_to_dict(string: str) -> Dict[str, List[str]]:
     return result
 
 
+def extract_claims(
+    data: Mapping[str, Payload],
+    keys: List[str],
+) -> Dict[str, FlatPayload]:
+    """Extract specific claims from a nested dictionary.
+
+    Recursively traverses nested dicts searching for the given keys.
+    Returns as soon as all requested keys are found. If a key appears
+    at multiple levels of nesting, the first occurrence (shallowest /
+    earliest in iteration order) wins.
+
+    Parameters
+    ----------
+    data:
+        The nested dictionary to search, typically a token or userinfo
+        payload from an IDP.
+    keys:
+        The claim names to extract.
+
+    Returns
+    -------
+    Dict[str, FlatPayload]
+        A flat dictionary containing the found claims. May be incomplete
+        if not all keys were present in the data.
+
+    """
+    remaining = set(keys)
+    result: Dict[str, FlatPayload] = {}
+
+    def _search(obj: Mapping[str, Payload]) -> None:
+        if not remaining or not isinstance(obj, dict):  # pragma: no cover
+            return
+        for key, value in obj.items():
+            if not remaining:
+                return
+            if isinstance(value, dict):
+                _search(value)
+            elif key in remaining:
+                result[key] = value
+                remaining.discard(key)
+
+    for key, value in data.items():
+        if not remaining:
+            break
+        if isinstance(value, dict):
+            _search(value)
+        elif key in remaining:
+            result[key] = value
+            remaining.discard(key)
+
+    return result
+
+
 def token_field_matches(
     token: str,
     claims: Optional[Union[str, Iterable[str], Dict[str, Iterable[str]]]] = None,
@@ -204,7 +257,7 @@ def token_field_matches(
     return all(c in roles for c in claims_list)
 
 
-def get_userinfo(user_info: Dict[str, str]) -> SystemUserInfo:
+def get_userinfo(user_info: Dict[str, Payload]) -> SystemUserInfo:
     """Map provider specific user fields into a normalised structure.
 
     Providers use different claim names for the same concept.
@@ -222,20 +275,26 @@ def get_userinfo(user_info: Dict[str, str]) -> SystemUserInfo:
     """
     output: Dict[str, str] = {}
     keys = {
-        "email": ("mail", "email"),
-        "username": ("preferred-username", "user-name", "uid"),
-        "last_name": ("last-name", "family-name", "name", "surname"),
-        "first_name": ("first-name", "given-name"),
+        "email": ["mail", "email"],
+        "username": ["preferred-username", "user-name", "uid", "username"],
+        "last_name": ["last-name", "family-name", "name", "surname"],
+        "first_name": ["first-name", "given-name"],
     }
+    claims = []
+    for attrs in keys.values():
+        for attr in attrs:
+            claims.append(attr)
+            claims.append(attr.replace("-", "_"))
+    claims = list(set(claims))
+    flat_user_info = cast(Dict[str, str], extract_claims(user_info, list(set(claims))))
     for key, entries in keys.items():
         for entry in entries:
-            if user_info.get(entry):
-                output[key] = user_info[entry]
+            v1 = flat_user_info.get(entry)
+            v2 = flat_user_info.get(entry.replace("-", "_"))
+            v = v1 or v2
+            if v:
+                output[key] = v
                 break
-            if user_info.get(entry.replace("-", "_")):
-                output[key] = user_info[entry.replace("-", "_")]
-                break
-
     name = output.get("first_name", "") + " " + output.get("last_name", "")
     return SystemUserInfo(
         first_name=name.partition(" ")[0],
@@ -296,7 +355,7 @@ async def oidc_request(
 
 
 async def query_user(
-    token_data: Dict[str, str], authorization: str, cfg: OIDCConfig
+    token_data: Dict[str, Payload], authorization: str, cfg: OIDCConfig
 ) -> UserInfo:
     """Create :class:`UserInfo` from token claims or the userinfo endpoint.
 
@@ -315,7 +374,7 @@ async def query_user(
         return UserInfo(**get_userinfo(token_data))
     except ValidationError:
         token_data = cast(
-            Dict[str, str],
+            Dict[str, Payload],
             await oidc_request(
                 cast(str, cfg.oidc_overview["userinfo_endpoint"]),
                 "GET",
@@ -334,6 +393,7 @@ async def get_username(
     current_user: Optional[IDToken],
     header: Dict[str, Any],
     cfg: OIDCConfig,
+    user_info: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Return a usable username.
 
@@ -344,6 +404,7 @@ async def get_username(
     :param current_user: Verified token.
     :param header: Request headers.
     :param cfg: OIDC configuration.
+    :param user_info: Optional user information from a previous userinfo query.
     :returns: Username or ``None``.
 
     Example
@@ -356,26 +417,18 @@ async def get_username(
     if not current_user:
         return None
 
-    def _extract_username(
-        obj: Any,
-        fields: List[str] = ["preferred_username", "username", "user_name"],
-    ) -> Optional[str]:
-        for field in fields:
-            value = getattr(obj, field, None)
-            if value:
-                return cast(Optional[str], value)
-        return None
-
-    username = _extract_username(current_user)
+    token_data: Dict[str, Payload] = {
+        k.lower(): v for (k, v) in current_user.model_dump().items()
+    }
+    username = get_userinfo(user_info or token_data).get("username")
     if username:
         return username
 
     authorization = header.get("authorization")
     if authorization:
-        token_data = {k.lower(): str(v) for (k, v) in dict(current_user).items()}
         try:
             user_data = await query_user(token_data, authorization, cfg)
-            username = _extract_username(user_data)
+            username = get_userinfo(user_data.model_dump()).get("username")
             if username:
                 return username
         except InvalidRequest:
