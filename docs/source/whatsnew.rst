@@ -3,7 +3,7 @@ What's new
 
 This document highlights major changes and additions across releases.
 
-v2605.5.0
+v2605.0.0
 ---------
 * improve error logging.
 * make refresh token optional.
