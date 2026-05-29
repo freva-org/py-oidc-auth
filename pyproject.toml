@@ -149,7 +149,7 @@ deps = -e .[docs]
        codespell
 allowlist_externals = make
                       codespell
-commands = codespell {posargs: --quiet-level=2} docs/source
+commands = python3 -m codespell_lib {posargs: --quiet-level=2} docs/source
            make -C docs clean
            make -C docs html
 
@@ -166,9 +166,9 @@ deps = -e .[all]
 commands =
     python3 -m isort --check --profile black -t py312 -l 79 src
     python3 -m flake8 src --count --max-complexity=10 --ignore=F405,F403,E704,W503,C901 --max-line-length=100 --statistics --show-source
-    codespell {posargs: --quiet-level=2} src/
+    python3 -m codespell_lib {posargs: --quiet-level=2} src/
     python3 -m pydocstyle src/py_oidc_auth
-    bandit -r src/py_oidc_auth --severity-level medium --confidence-level high
+    python3 -m bandit -r src/py_oidc_auth --severity-level medium --confidence-level high
 [testenv:types]
 description = "Static type checking."
 deps = .[all]
