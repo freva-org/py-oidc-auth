@@ -48,9 +48,10 @@ class InvalidRequest(Exception):
         super().__init__(detail)
 
     def log_traceback(self) -> None:
+        """Log a traceback with a warning."""
         logger.warning(
             "Invalid Request with %i: %s",
             self.status_code,
             self.detail,
-            exc_info=self.__traceback__,
+            exc_info=self,
         )
