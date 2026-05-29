@@ -684,12 +684,12 @@ class OIDCAuth:
                 access_token=token_data["access_token"],
                 token_type=token_data["token_type"],
                 expires=int(expires_at),
-                refresh_token=token_data["refresh_token"],
+                refresh_token=token_data.get("refresh_token"),
                 refresh_expires=int(refresh_expires_at),
                 scope=token_data["scope"],
             )
-        except KeyError:
-            raise InvalidRequest(400, detail="Token creation failed.")
+        except KeyError as exc:
+            raise InvalidRequest(400, detail=f"Token creation failed: {exc}")
 
     async def logout(self, post_logout_redirect_uri: Optional[str]) -> str:
         """Create a provider logout redirect target.
