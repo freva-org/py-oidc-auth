@@ -295,6 +295,7 @@ class FlaskOIDCAuth(OIDCAuth):
                         )
                     )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return redirect(auth_url)
 
@@ -307,6 +308,7 @@ class FlaskOIDCAuth(OIDCAuth):
                 try:
                     result = asyncio.run(self.callback(code=code, state=state))
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result)
 
@@ -317,6 +319,7 @@ class FlaskOIDCAuth(OIDCAuth):
                 try:
                     result = asyncio.run(self.device_flow())
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
 
@@ -358,6 +361,7 @@ class FlaskOIDCAuth(OIDCAuth):
                             )
                         )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
 
@@ -385,6 +389,7 @@ class FlaskOIDCAuth(OIDCAuth):
                         self.userinfo(token_obj, dict(request.headers))
                     )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
 

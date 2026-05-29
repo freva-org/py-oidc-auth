@@ -333,7 +333,7 @@ class TokenBroker:
         self,
         jti: str,
         sub: Optional[str],
-        refresh_token: str,
+        refresh_token: Optional[str],
         expires_at: int,
         user_info: str = "",
     ) -> None:

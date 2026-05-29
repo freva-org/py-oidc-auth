@@ -17,6 +17,10 @@ Example
 
 """
 
+import logging
+
+logger = logging.getLogger("py-oidc-auth.requests")
+
 
 class InvalidRequest(Exception):
     """An error that can be represented as an HTTP response.
@@ -42,3 +46,12 @@ class InvalidRequest(Exception):
         self.status_code = status_code
         self.detail = detail
         super().__init__(detail)
+
+    def log_traceback(self) -> None:
+        """Log a traceback with a warning."""
+        logger.warning(
+            "Invalid Request with %i: %s",
+            self.status_code,
+            self.detail,
+            exc_info=self,
+        )

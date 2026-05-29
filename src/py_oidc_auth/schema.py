@@ -141,8 +141,8 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     expires: int
-    refresh_token: str
-    refresh_expires: int
+    refresh_token: Optional[str]
+    refresh_expires: Optional[int]
     scope: str
 
 
