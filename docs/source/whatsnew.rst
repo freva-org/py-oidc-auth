@@ -3,6 +3,13 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2604.5.0
+---------
+* improve error logging.
+* make refresh token optional.
+
+
+
 v2604.3.0
 ---------
 * store payload from `userinfo` query to token store.
