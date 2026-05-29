@@ -904,11 +904,12 @@ class OIDCAuth:
             preferred_username=username,
             expiry_seconds=expiry_seconds,
         )
+        refresh_exp = idp_token.refresh_expires
         await broker.save_session(
             jti=jti,
             sub=idp_claims.sub,
             refresh_token=idp_token.refresh_token,
-            expires_at=idp_token.refresh_expires,
+            expires_at=refresh_exp if refresh_exp is not None else 0,
             user_info=json.dumps(user_info),
         )
 

@@ -160,7 +160,7 @@ class BrokerStore(abc.ABC):
         self,
         jti: str,
         sub: str,
-        refresh_token: str,
+        refresh_token: Optional[str],
         expires_at: int,
         user_info: str = "",
     ) -> None:
@@ -232,7 +232,11 @@ class _SessionEntry:
     __slots__ = ("sub", "refresh_token", "expires_at", "user_info")
 
     def __init__(
-        self, sub: str, refresh_token: str, expires_at: int, user_info: str = ""
+        self,
+        sub: str,
+        refresh_token: Optional[str],
+        expires_at: int,
+        user_info: str = "",
     ) -> None:
         self.sub = sub
         self.refresh_token = refresh_token
@@ -273,7 +277,7 @@ class InMemoryBrokerStore(BrokerStore):
         self,
         jti: str,
         sub: str,
-        refresh_token: str,
+        refresh_token: Optional[str],
         expires_at: int,
         user_info: str = "",
     ) -> None:
@@ -406,7 +410,7 @@ class MongoDBBrokerStore(BrokerStore):
         self,
         jti: str,
         sub: str,
-        refresh_token: str,
+        refresh_token: Optional[str],
         expires_at: int,
         user_info: str = "",
     ) -> None:
@@ -651,7 +655,7 @@ class SQLAlchemyBrokerStore(BrokerStore):
         self,
         jti: str,
         sub: str,
-        refresh_token: str,
+        refresh_token: Optional[str],
         expires_at: int,
         user_info: str = "",
     ) -> None:
