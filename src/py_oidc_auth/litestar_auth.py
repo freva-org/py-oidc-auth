@@ -66,6 +66,7 @@ LitestarRequest = Request[Any, Any, Any]
 
 def _map_exception(exc: InvalidRequest) -> HTTPException:
     """Map :class:`InvalidRequest` to a Litestar exception."""
+    exc.log_traceback()
     if exc.status_code == 401:
         return NotAuthorizedException(detail=exc.detail)
     if exc.status_code == 403:

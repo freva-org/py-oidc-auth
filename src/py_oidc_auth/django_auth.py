@@ -140,6 +140,7 @@ class DjangoOIDCAuth(OIDCAuth):
                             effective_claims=effective_claims,
                         )
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         return _error_response(exc.status_code, exc.detail)
                 return await fn(request, token, *args, **kwargs)
 
@@ -250,6 +251,7 @@ class DjangoOIDCAuth(OIDCAuth):
                         scope=scope,
                     )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return HttpResponseRedirect(auth_url)
 
@@ -263,6 +265,7 @@ class DjangoOIDCAuth(OIDCAuth):
                 try:
                     result = await auth.callback(code=code, state=state)
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return JsonResponse(result)
 
@@ -276,6 +279,7 @@ class DjangoOIDCAuth(OIDCAuth):
                 try:
                     result = await auth.device_flow()
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return JsonResponse(result.model_dump())
 
@@ -313,6 +317,7 @@ class DjangoOIDCAuth(OIDCAuth):
                             code_verifier=code_verifier,
                         )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return JsonResponse(result.model_dump())
 
@@ -343,6 +348,7 @@ class DjangoOIDCAuth(OIDCAuth):
                 try:
                     result = await auth.userinfo(token_obj, dict(request.headers))
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return JsonResponse(result.model_dump())
 

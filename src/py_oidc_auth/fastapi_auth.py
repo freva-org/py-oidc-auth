@@ -408,6 +408,7 @@ class FastApiOIDCAuth(OIDCAuth):
                         scope=scope,
                     )
                 except InvalidRequest as error:
+                    logger.exception(error)
                     raise HTTPException(
                         status_code=error.status_code, detail=error.detail
                     )
@@ -431,6 +432,7 @@ class FastApiOIDCAuth(OIDCAuth):
                 try:
                     return await _callback_func(code=code, state=state)
                 except InvalidRequest as error:
+                    error.log_traceback()
                     raise HTTPException(
                         status_code=error.status_code, detail=error.detail
                     )
@@ -443,6 +445,7 @@ class FastApiOIDCAuth(OIDCAuth):
                 try:
                     return await _deviceflow_func()
                 except InvalidRequest as error:
+                    error.log_traceback()
                     raise HTTPException(
                         status_code=error.status_code, detail=error.detail
                     )
@@ -578,7 +581,7 @@ class FastApiOIDCAuth(OIDCAuth):
                 try:
                     return await _userinfo_func(id_token, dict(request.headers))
                 except InvalidRequest as error:
-                    logger.exception(error)
+                    error.log_traceback()
                     raise HTTPException(
                         status_code=error.status_code, detail=error.detail
                     )

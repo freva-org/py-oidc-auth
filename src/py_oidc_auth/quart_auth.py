@@ -138,6 +138,7 @@ class QuartOIDCAuth(OIDCAuth):
                             effective_claims=effective_claims,
                         )
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         return _error_response(exc.status_code, exc.detail)
                 return await fn(token, *args, **kwargs)
 
@@ -249,6 +250,7 @@ class QuartOIDCAuth(OIDCAuth):
                         scope=scope,
                     )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return redirect(auth_url)
 
@@ -261,6 +263,7 @@ class QuartOIDCAuth(OIDCAuth):
                 try:
                     result = await self.callback(code=code, state=state)
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result)
 
@@ -271,6 +274,7 @@ class QuartOIDCAuth(OIDCAuth):
                 try:
                     result = await self.device_flow()
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
 
@@ -309,6 +313,7 @@ class QuartOIDCAuth(OIDCAuth):
                             code_verifier=code_verifier,
                         )
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
 
@@ -334,6 +339,7 @@ class QuartOIDCAuth(OIDCAuth):
                 try:
                     result = await self.userinfo(token_obj, dict(request.headers))
                 except InvalidRequest as exc:
+                    exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
                 return jsonify(result.model_dump())
 

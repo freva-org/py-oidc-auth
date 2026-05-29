@@ -163,6 +163,7 @@ class TornadoOIDCAuth(OIDCAuth):
                             effective_claims=effective_claims,
                         )
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         _write_error(handler, exc.status_code, exc.detail)
                         return
                 return await method(handler, token, *args, **kwargs)
@@ -289,6 +290,7 @@ class TornadoOIDCAuth(OIDCAuth):
                             scope=scope,
                         )
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         _write_error(self, exc.status_code, exc.detail)
                         return
                     self.redirect(auth_url)
@@ -304,6 +306,7 @@ class TornadoOIDCAuth(OIDCAuth):
                     try:
                         result = await self.oidc_auth.callback(code=code, state=state)
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         _write_error(self, exc.status_code, exc.detail)
                         return
                     self.set_header("Content-Type", "application/json")
@@ -318,6 +321,7 @@ class TornadoOIDCAuth(OIDCAuth):
                     try:
                         result = await self.oidc_auth.device_flow()
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         _write_error(self, exc.status_code, exc.detail)
                         return
                     self.set_header("Content-Type", "application/json")
@@ -361,6 +365,7 @@ class TornadoOIDCAuth(OIDCAuth):
                                 code_verifier=code_verifier,
                             )
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         _write_error(self, exc.status_code, exc.detail)
                         return
                     self.set_header("Content-Type", "application/json")
@@ -400,6 +405,7 @@ class TornadoOIDCAuth(OIDCAuth):
                             token_obj, dict(self.request.headers)
                         )
                     except InvalidRequest as exc:
+                        exc.log_traceback()
                         _write_error(self, exc.status_code, exc.detail)
                         return
                     self.set_header("Content-Type", "application/json")
