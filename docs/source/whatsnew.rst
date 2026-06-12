@@ -3,6 +3,11 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2606.0.0
+---------
+* Fixed missing `openid` scope in device-code flow (operator-precedence bug)
+
+
 v2605.0.0
 ---------
 * improve error logging.
