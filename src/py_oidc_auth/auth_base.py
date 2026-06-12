@@ -185,7 +185,7 @@ class OIDCAuth:
         mongo_store = MongoDBBrokerStore(db=mongo_client["my_app"])
         auth = OIDCAuth(
             client_id="my client",
-            discovery_url="https://idp.example.org/.well-known/-configuration",
+            discovery_url="https://idp.example.org/.well-known/openid-configuration",
             client_secret="secret",
             scopes="myscope profile email",
             appname="my-app",
