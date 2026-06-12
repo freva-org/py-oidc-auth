@@ -185,7 +185,7 @@ class OIDCAuth:
         mongo_store = MongoDBBrokerStore(db=mongo_client["my_app"])
         auth = OIDCAuth(
             client_id="my client",
-            discovery_url="https://idp.example.org/.well-known/openid-configuration",
+            discovery_url="https://idp.example.org/.well-known/-configuration",
             client_secret="secret",
             scopes="myscope profile email",
             appname="my-app",
@@ -554,7 +554,7 @@ class OIDCAuth:
             Content-Length: 0
 
         """
-        scopes = self.config.scopes or [] + ["openid"]
+        scopes = (self.config.scopes or []) + ["openid"]
         scopes += ["offline_access"] if self.config.offline_access else []
         data: Dict[str, str] = {"scope": " ".join(set(scopes))}
         headers: Dict[str, str] = {}
