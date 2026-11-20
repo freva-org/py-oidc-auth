@@ -25,7 +25,7 @@ Usage
     )
 
     @get("/protected", dependencies={"token": auth.required()})
-    async def protected(token: IDToken) -> dict:
+    async def protected(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     app = Litestar(route_handlers=[auth.create_auth_router(prefix="/api"), protected])
@@ -41,7 +41,7 @@ import jwt as pyjwt
 
 try:
     from litestar import Request, Router, get, post
-    from litestar.di import Provide
+    from litestar.di import NamedDependency, Provide
     from litestar.exceptions import (
         HTTPException,
         NotAuthorizedException,
@@ -110,7 +110,7 @@ class LitestarOIDCAuth(OIDCAuth):
         .. code-block:: python
 
             @get("/protected", dependencies={"token": auth.required(scopes="admin")})
-            async def protected(token: IDToken) -> dict:
+            async def protected(token: NamedDependency[IDToken]) -> dict:
                 return {"sub": token.sub}
 
         """
@@ -240,6 +240,11 @@ class LitestarOIDCAuth(OIDCAuth):
                         prompt=prompt,
                         offline_access=offline_access,
                         scope=scope,
+                        code_challenge=request.query_params.get("code_challenge"),
+                        code_challenge_method=request.query_params.get(
+                            "code_challenge_method"
+                        ),
+                        state=request.query_params.get("state"),
                     )
                 except InvalidRequest as exc:
                     raise _map_exception(exc)
@@ -265,9 +270,13 @@ class LitestarOIDCAuth(OIDCAuth):
         if device_flow:
 
             @post(device_flow, status_code=200)
-            async def _device_flow() -> Dict[str, Any]:
+            async def _device_flow(request: LitestarRequest) -> Dict[str, Any]:
+                form = await request.form()
                 try:
-                    result = await auth.device_flow()
+                    result = await auth.device_flow(
+                        code_challenge=form.get("code_challenge"),
+                        code_challenge_method=form.get("code_challenge_method"),
+                    )
                     return result.model_dump()
                 except InvalidRequest as exc:
                     raise _map_exception(exc)
@@ -282,8 +291,8 @@ class LitestarOIDCAuth(OIDCAuth):
                 form = await request.form()
                 code = form.get("code")
                 redirect_uri = form.get("redirect_uri")
-                refresh_token = form.get("refresh-token")
-                device_code = form.get("device-code")
+                refresh_token = form.get("refresh_token") or form.get("refresh-token")
+                device_code = form.get("device_code") or form.get("device-code")
                 code_verifier = form.get("code_verifier")
                 grant_type = form.get("grant_type")
                 subject_token = form.get("subject_token")
@@ -329,7 +338,13 @@ class LitestarOIDCAuth(OIDCAuth):
                 post_logout_redirect_uri = request.query_params.get(
                     "post_logout_redirect_uri"
                 )
-                target = await auth.logout(post_logout_redirect_uri)
+                try:
+                    target = await auth.logout(
+                        post_logout_redirect_uri,
+                        id_token_hint=request.query_params.get("id_token_hint"),
+                    )
+                except InvalidRequest as exc:
+                    raise _map_exception(exc)
                 return Redirect(path=target)
 
             handlers.append(_logout)
@@ -339,7 +354,7 @@ class LitestarOIDCAuth(OIDCAuth):
 
             @get(userinfo, dependencies={"token": required_dep})
             async def _userinfo(
-                request: LitestarRequest, token: IDToken
+                request: LitestarRequest, token: NamedDependency[IDToken]
             ) -> Dict[str, Any]:
                 try:
                     result = await auth.userinfo(token, dict(request.headers))

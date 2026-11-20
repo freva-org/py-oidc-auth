@@ -37,7 +37,7 @@ dependencies = [
     "pydantic",
     "platformdirs",
     "PyJWT[crypto]",
-    "sqlalchemy",
+    "sqlalchemy[asyncio]",
     "typing_extensions",
 ]
 [project.urls]
@@ -50,7 +50,7 @@ fastapi = ["fastapi", "python-multipart", "uvicorn"]
 flask = ["flask"]
 quart = ["quart"]
 tornado = ["tornado"]
-litestar = ["litestar"]
+litestar = ["litestar>=2.23"]
 django = ["django>=4.0"]
 dev = ["tox", "cryptography", "uvicorn", "py-oidc-auth[all,tests]"]
 all = ["py-oidc-auth[fastapi,flask,quart,tornado,litestar,django]"]

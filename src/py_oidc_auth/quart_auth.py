@@ -248,6 +248,9 @@ class QuartOIDCAuth(OIDCAuth):
                         prompt=cast(PromptField, prompt),
                         offline_access=offline_access,
                         scope=scope,
+                        code_challenge=request.args.get("code_challenge"),
+                        code_challenge_method=request.args.get("code_challenge_method"),
+                        state=request.args.get("state"),
                     )
                 except InvalidRequest as exc:
                     exc.log_traceback()
@@ -271,8 +274,12 @@ class QuartOIDCAuth(OIDCAuth):
 
             @bp.route(device_flow, methods=["POST"])
             async def _device_flow() -> Response:
+                form = await request.form
                 try:
-                    result = await self.device_flow()
+                    result = await self.device_flow(
+                        code_challenge=form.get("code_challenge"),
+                        code_challenge_method=form.get("code_challenge_method"),
+                    )
                 except InvalidRequest as exc:
                     exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
@@ -286,8 +293,8 @@ class QuartOIDCAuth(OIDCAuth):
                 form = await request.form
                 code = form.get("code")
                 redirect_uri = form.get("redirect_uri")
-                refresh_token = form.get("refresh-token")
-                device_code = form.get("device-code")
+                refresh_token = form.get("refresh_token") or form.get("refresh-token")
+                device_code = form.get("device_code") or form.get("device-code")
                 code_verifier = form.get("code_verifier")
                 grant_type = form.get("grant_type")
                 subject_token = form.get("subject_token")
@@ -328,7 +335,14 @@ class QuartOIDCAuth(OIDCAuth):
             @bp.route(logout, methods=["GET"])
             async def _logout() -> Union[Response, "WerkzeugRes"]:
                 post_logout_redirect_uri = request.args.get("post_logout_redirect_uri")
-                target = await self.logout(post_logout_redirect_uri)
+                try:
+                    target = await self.logout(
+                        post_logout_redirect_uri,
+                        id_token_hint=request.args.get("id_token_hint"),
+                    )
+                except InvalidRequest as exc:
+                    exc.log_traceback()
+                    return _error_response(exc.status_code, exc.detail)
                 return redirect(target)
 
         if userinfo:

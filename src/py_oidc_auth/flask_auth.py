@@ -292,6 +292,11 @@ class FlaskOIDCAuth(OIDCAuth):
                             prompt=prompt,
                             offline_access=offline == "true",
                             scope=scope,
+                            code_challenge=request.args.get("code_challenge"),
+                            code_challenge_method=request.args.get(
+                                "code_challenge_method"
+                            ),
+                            state=request.args.get("state"),
                         )
                     )
                 except InvalidRequest as exc:
@@ -317,7 +322,14 @@ class FlaskOIDCAuth(OIDCAuth):
             @bp.route(device_flow, methods=["POST"])
             def _device_flow() -> Response:
                 try:
-                    result = asyncio.run(self.device_flow())
+                    result = asyncio.run(
+                        self.device_flow(
+                            code_challenge=request.form.get("code_challenge"),
+                            code_challenge_method=request.form.get(
+                                "code_challenge_method"
+                            ),
+                        )
+                    )
                 except InvalidRequest as exc:
                     exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
@@ -330,8 +342,12 @@ class FlaskOIDCAuth(OIDCAuth):
             def _fetch_or_refresh_token() -> Union[Response, "WerkzeugRes"]:
                 code = request.form.get("code")
                 redirect_uri = request.form.get("redirect_uri")
-                refresh_token = request.form.get("refresh-token")
-                device_code = request.form.get("device-code")
+                refresh_token = request.form.get("refresh_token") or request.form.get(
+                    "refresh-token"
+                )
+                device_code = request.form.get("device_code") or request.form.get(
+                    "device-code"
+                )
                 code_verifier = request.form.get("code_verifier")
                 grant_type = request.form.get("grant_type")
                 subject_token = request.form.get("subject_token")
@@ -376,7 +392,16 @@ class FlaskOIDCAuth(OIDCAuth):
             @bp.route(logout, methods=["GET"])
             def _logout() -> Union[Response, "WerkzeugRes"]:
                 post_logout_redirect_uri = request.args.get("post_logout_redirect_uri")
-                redirect_target = asyncio.run(self.logout(post_logout_redirect_uri))
+                try:
+                    redirect_target = asyncio.run(
+                        self.logout(
+                            post_logout_redirect_uri,
+                            id_token_hint=request.args.get("id_token_hint"),
+                        )
+                    )
+                except InvalidRequest as exc:
+                    exc.log_traceback()
+                    return _error_response(exc.status_code, exc.detail)
                 return redirect(redirect_target)
 
         if userinfo:

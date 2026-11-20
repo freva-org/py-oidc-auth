@@ -104,7 +104,8 @@ exposes these endpoints by default:
 
 .. http:get:: /auth/v2/login
 
-   Starts the authorization code flow.
+   Starts the authorization code flow. Send ``code_challenge`` (S256) and
+   ``state``; without them the server keeps the verifier in ``state``.
 
 .. http:get:: /auth/v2/callback
 
@@ -112,15 +113,19 @@ exposes these endpoints by default:
 
 .. http:post:: /auth/v2/token
 
-   Exchanges an authorization code or refresh token.
+   Exchanges an authorization code (with ``code_verifier``), refreshes
+   (``refresh_token``) or polls the device flow (``device_code``, with
+   ``code_verifier``). Token responses include the provider's ``id_token``.
 
 .. http:post:: /auth/v2/device
 
-   Starts the device authorization flow.
+   Starts the device authorization flow; send ``code_challenge`` to bind it
+   to your verifier.
 
 .. http:get:: /auth/v2/logout
 
-   Redirects to the provider logout endpoint.
+   Redirects to the provider logout endpoint. Pass ``id_token_hint`` to
+   skip the provider's confirmation page.
 
 .. http:get:: /auth/v2/userinfo
 

@@ -11,7 +11,7 @@ Supported flows
 
 * Authorization code flow with PKCE
 * Refresh token flow
-* Device authorization flow
+* Device authorization flow, with PKCE when the client asks for it
 * Userinfo lookup
 * Provider initiated logout (end session)
 
@@ -46,6 +46,34 @@ browser to.
 The code and state values are sent back to your callback endpoint by the
 identity provider.
 
+PKCE
+----
+
+PKCE only protects a login when the code verifier stays with the party that
+started it. Clients should therefore make their own verifier and pass only
+its S256 challenge (and their own ``state``) to :meth:`OIDCAuth.login`. The
+provider then redirects to the client, which checks ``state`` and redeems
+the code at the token endpoint with its verifier:
+
+.. code-block:: python
+
+    url = await auth.login(
+        redirect_uri="http://localhost:53100/callback",
+        prompt="none",
+        code_challenge=challenge,  # base64url(sha256(verifier)), no padding
+        state=client_state,
+    )
+    # ... the browser comes back to the client with code and state ...
+    token = await auth.token("/auth/v2/token", code=code,
+                             redirect_uri="http://localhost:53100/callback",
+                             code_verifier=verifier)
+
+Without a challenge, :meth:`OIDCAuth.login` falls back to the old behaviour:
+it makes the verifier itself and carries it in ``state``, so that
+:meth:`OIDCAuth.callback` can redeem the code. That keeps older clients
+working but gives no PKCE protection, because whoever sees the redirect sees
+code and verifier together. Set ``require_client_pkce=True`` to refuse it.
+
 """
 
 import asyncio
@@ -54,8 +82,9 @@ import datetime
 import hashlib
 import json
 import logging
+import re
 import secrets
-from typing import Any, Dict, Optional, Set, Union, cast
+from typing import Any, Dict, Optional, Set, Tuple, Union, cast
 from urllib.parse import urlencode, urljoin
 
 import httpx
@@ -83,6 +112,35 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# base64url(sha256(verifier)) without padding: always 43 characters.
+_S256_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")
+
+
+def _pkce_pair() -> Tuple[str, str]:
+    """Return a new PKCE ``(verifier, S256 challenge)`` pair."""
+    verifier = secrets.token_urlsafe(32)
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+        .decode()
+        .rstrip("=")
+    )
+    return verifier, challenge
+
+
+def _check_challenge(code_challenge: str, method: Optional[str]) -> None:
+    """Accept S256 challenges only; ``plain`` would hand out the verifier.
+
+    :raises InvalidRequest: 400 for another method or a malformed challenge.
+    """
+    if (method or "S256") != "S256":
+        raise InvalidRequest(
+            400, detail="Only code_challenge_method=S256 is supported."
+        )
+    if not _S256_CHALLENGE.fullmatch(code_challenge):
+        raise InvalidRequest(
+            400, detail="code_challenge must be an unpadded base64url S256 hash."
+        )
 
 
 def _set_request_header(
@@ -153,6 +211,10 @@ class OIDCAuth:
     :param trusted_issuers: List of peer instance base URLs whose JWTs are
         accepted for cross-instance federation.
     :param broker_jwks_path: Path appended to peer URLs when fetching JWKS.
+    :param require_client_pkce: Refuse logins and device flows that bring no
+        ``code_challenge`` of their own, and disable :meth:`callback`. Without
+        it, such logins fall back to a server made verifier carried in
+        ``state``, which keeps old clients working but protects nothing.
 
     Example
     -------
@@ -219,6 +281,7 @@ class OIDCAuth:
         broker_audience: str = "py-oidc-auth",
         trusted_issuers: Optional[list[str]] = None,
         broker_jwks_path: str = "/auth/v2/.well-known/jwks.json",
+        require_client_pkce: bool = False,
     ) -> None:
         self._lock = asyncio.Lock()
         self.config = OIDCConfig(
@@ -246,6 +309,9 @@ class OIDCAuth:
         self.broker_jwks_path = broker_jwks_path
         self._broker: Optional["TokenBroker"] = None
         self._broker_lock = asyncio.Lock()
+
+        self.require_client_pkce = require_client_pkce
+        self._warned_legacy_pkce = False
 
     async def _ensure_auth_initialized(self) -> None:
         """Load the discovery document and prepare token validation.
@@ -327,6 +393,29 @@ class OIDCAuth:
                 "restriction. Consider setting broker_mode=True."
             )
 
+    def _endpoint(self, endpoint_key: str) -> str:
+        """Look an endpoint up in the discovery document.
+
+        :param endpoint_key: Key in the discovery document.
+        :returns: The endpoint URL.
+        :raises InvalidRequest: 503 when the discovery document could not be
+            loaded (the provider is down or unreachable), 502 when it was
+            loaded but lacks the endpoint.
+        """
+        overview = self.config.oidc_overview
+        if not overview:
+            raise InvalidRequest(
+                status_code=503,
+                detail="OIDC provider unavailable: no discovery document.",
+            )
+        url = overview.get(endpoint_key)
+        if not url:
+            raise InvalidRequest(
+                status_code=502,
+                detail=f"OIDC endpoint '{endpoint_key}' not found in discovery.",
+            )
+        return str(url)
+
     async def make_oidc_request(
         self,
         method: str,
@@ -345,7 +434,8 @@ class OIDCAuth:
         :param data: Optional form data.
         :param headers: Optional request headers.
         :returns: JSON response decoded into a dict.
-        :raises InvalidRequest: If the endpoint is missing or the request fails.
+        :raises InvalidRequest: 503 if the provider is unreachable, 502 if the
+            endpoint is missing, the provider's status if it refuses.
 
         Example
         -------
@@ -355,12 +445,7 @@ class OIDCAuth:
 
         """
         await self._ensure_auth_initialized()
-        url = cast(str, self.config.oidc_overview.get(endpoint_key))
-        if not url:
-            raise InvalidRequest(
-                status_code=502,
-                detail=f"OIDC endpoint '{endpoint_key}' not found in discovery.",
-            )
+        url = self._endpoint(endpoint_key)
         return await oidc_request(
             url,
             method,
@@ -428,19 +513,36 @@ class OIDCAuth:
         prompt: PromptField,
         offline_access: bool = False,
         scope: Optional[str] = None,
+        code_challenge: Optional[str] = None,
+        code_challenge_method: Optional[str] = None,
+        state: Optional[str] = None,
     ) -> str:
         """Create the authorization URL for the authorization code flow.
 
-        This method generates a URL for the provider authorization endpoint.
-        It includes PKCE parameters and stores state information in the
-        ``state`` parameter.
+        This method generates a URL for the provider authorization endpoint
+        with PKCE parameters.
+
+        With ``code_challenge`` (the recommended way) the client keeps its
+        verifier: the challenge and the client's ``state`` go to the provider
+        unchanged, and the client redeems the code with :meth:`token`.
+
+        Without it, the server makes the verifier and stores it, together
+        with ``redirect_uri``, in ``state`` as
+        ``<random or client state>|<redirect_uri>|<verifier>`` for
+        :meth:`callback`. This legacy mode gives no PKCE protection and is
+        refused when ``require_client_pkce`` is set.
 
         :param redirect_uri: Absolute URL of your callback endpoint.
         :param prompt: Provider prompt parameter.
         :param offline_access: If true, include ``offline_access`` in scope.
         :param scope: Optional scope override.
+        :param code_challenge: The client's S256 PKCE challenge.
+        :param code_challenge_method: Must be ``S256`` if given.
+        :param state: The client's own state, returned by the provider as is
+            (in legacy mode as the first part of ``state``).
         :returns: URL to redirect the browser to.
-        :raises InvalidRequest: If required configuration is missing.
+        :raises InvalidRequest: 400 for missing or invalid parameters, 503 if
+            the provider is unavailable.
 
         Example
         -------
@@ -457,21 +559,36 @@ class OIDCAuth:
 
         .. code-block:: text
 
-            GET /auth/v2/login?redirect_uri=https%3A%2F%2Fapp.example.org%2Fauth%2Fcallback HTTP/1.1
+            GET /auth/v2/login?redirect_uri=http%3A%2F%2Flocalhost%3A53100%2Fcallback
+                &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+                &state=af0ifjsldkj HTTP/1.1
             Host: app.example.org
 
         """
         if not redirect_uri:
             raise InvalidRequest(status_code=400, detail="Missing redirect_uri")
+        if code_challenge:
+            _check_challenge(code_challenge, code_challenge_method)
+            state = state or secrets.token_urlsafe(16)
+        elif self.require_client_pkce:
+            raise InvalidRequest(400, detail="code_challenge is required (S256 PKCE).")
+        else:
+            if state and "|" in state:
+                raise InvalidRequest(400, detail="state must not contain '|'.")
+            if not self._warned_legacy_pkce:
+                self._warned_legacy_pkce = True
+                logger.warning(
+                    "Login without a client code_challenge: the PKCE verifier "
+                    "travels in state and protects nothing. Update the client "
+                    "to send code_challenge, then set require_client_pkce=True."
+                )
+            code_verifier, code_challenge = _pkce_pair()
+            state = (
+                f"{state or secrets.token_urlsafe(16)}|{redirect_uri}|{code_verifier}"
+            )
         await self._ensure_auth_initialized()
+        authorization_endpoint = self._endpoint("authorization_endpoint")
         scope = scope or ""
-        code_verifier = secrets.token_urlsafe(32)
-        code_challenge = (
-            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
-            .decode()
-            .rstrip("=")
-        )
-        state = f"{secrets.token_urlsafe(16)}|{redirect_uri}|{code_verifier}"
         nonce = secrets.token_urlsafe(16)
         scopes_list = (
             [s.strip() for s in scope.split() if s.strip()] or self.config.scopes or []
@@ -489,9 +606,7 @@ class OIDCAuth:
             "code_challenge_method": "S256",
         }
         query = {k: v for k, v in query.items() if v}
-        return (
-            f"{self.config.oidc_overview['authorization_endpoint']}?{urlencode(query)}"
-        )
+        return f"{authorization_endpoint}?{urlencode(query)}"
 
     async def callback(
         self,
@@ -504,6 +619,10 @@ class OIDCAuth:
         and ``state``.
         This method exchanges the code for tokens by calling the provider
         token endpoint.
+
+        Only for logins in legacy mode (no client ``code_challenge``), whose
+        ``state`` carries the redirect URI and verifier. Disabled when
+        ``require_client_pkce`` is set.
 
         :param code: Authorization code from the provider.
         :param state: Opaque state created by :meth:`login`.
@@ -518,6 +637,12 @@ class OIDCAuth:
             Host: app.example.org
 
         """
+        if self.require_client_pkce:
+            raise InvalidRequest(
+                400,
+                detail="Server side callback is disabled: redeem the code "
+                "at the token endpoint with your code_verifier.",
+            )
         if not code or not state:
             raise InvalidRequest(400, detail="Missing code or state")
         try:
@@ -532,17 +657,32 @@ class OIDCAuth:
             redirect_uri=redirect_uri,
             code_verifier=code_verifier,
         )
-        return token.model_dump()
+        # Leave out what the provider did not send (id_token, refresh_token)
+        # rather than returning nulls the route's return type does not allow.
+        return cast(Dict[str, Union[str, int]], token.model_dump(exclude_none=True))
 
-    async def device_flow(self) -> DeviceStartResponse:
+    async def device_flow(
+        self,
+        code_challenge: Optional[str] = None,
+        code_challenge_method: Optional[str] = None,
+    ) -> DeviceStartResponse:
         """Start the OAuth 2 device authorization flow.
 
         This is useful for devices without a browser.
         The provider returns a user code and a verification URI.
         The user visits the URI, enters the code, and authorizes the device.
 
+        With ``code_challenge`` the flow is bound to the client's verifier:
+        whoever polls with the device code must also send ``code_verifier``
+        to :meth:`token`, so a leaked device code alone is worthless.
+        Providers that support it (Keycloak 25 and later) enforce this.
+
+        :param code_challenge: The client's S256 PKCE challenge.
+        :param code_challenge_method: Must be ``S256`` if given.
         :returns: Device authorization information.
-        :raises InvalidRequest: If the provider response is malformed.
+        :raises InvalidRequest: 400 for an invalid or, with
+            ``require_client_pkce``, missing challenge; 502 if the provider
+            response is malformed; 503 if the provider is unavailable.
 
         Request example
         ---------------
@@ -551,12 +691,19 @@ class OIDCAuth:
             POST /auth/v2/device HTTP/1.1
             Host: app.example.org
             Content-Type: application/x-www-form-urlencoded
-            Content-Length: 0
+
+            code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256
 
         """
         scopes = (self.config.scopes or []) + ["openid"]
         scopes += ["offline_access"] if self.config.offline_access else []
         data: Dict[str, str] = {"scope": " ".join(set(scopes))}
+        if code_challenge:
+            _check_challenge(code_challenge, code_challenge_method)
+            data["code_challenge"] = code_challenge
+            data["code_challenge_method"] = "S256"
+        elif self.require_client_pkce:
+            raise InvalidRequest(400, detail="code_challenge is required (S256 PKCE).")
         headers: Dict[str, str] = {}
         _set_request_header(
             self.config.client_id, self.config.client_secret, data, headers
@@ -602,7 +749,8 @@ class OIDCAuth:
         :param redirect_uri: Redirect URI to send to the token endpoint.
         :param refresh_token: Refresh token for renewing access.
         :param device_code: Device code for polling in the device flow.
-        :param code_verifier: PKCE verifier used during the login step.
+        :param code_verifier: PKCE verifier whose challenge was sent at login
+            or at the start of the device flow.
         :returns: Parsed :class:`~py_oidc_auth.schema.Token`.
         :raises InvalidRequest: If inputs are missing or the provider call fails.
 
@@ -636,7 +784,10 @@ class OIDCAuth:
             Host: app.example.org
             Content-Type: application/x-www-form-urlencoded
 
-            device_code=device
+            device_code=device&code_verifier=xyz
+
+        The adapters also accept the older field names ``refresh-token`` and
+        ``device-code``.
 
         """
         data: Dict[str, str] = {}
@@ -653,6 +804,8 @@ class OIDCAuth:
         elif device_code:
             data["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
             data["device_code"] = device_code
+            if code_verifier:
+                data["code_verifier"] = code_verifier
         else:
             raise InvalidRequest(400, detail="Missing (device) code or refresh_token")
 
@@ -687,11 +840,16 @@ class OIDCAuth:
                 refresh_token=token_data.get("refresh_token"),
                 refresh_expires=int(refresh_expires_at),
                 scope=token_data["scope"],
+                id_token=token_data.get("id_token"),
             )
         except KeyError as exc:
             raise InvalidRequest(400, detail=f"Token creation failed: {exc}")
 
-    async def logout(self, post_logout_redirect_uri: Optional[str]) -> str:
+    async def logout(
+        self,
+        post_logout_redirect_uri: Optional[str],
+        id_token_hint: Optional[str] = None,
+    ) -> str:
         """Create a provider logout redirect target.
 
         If the provider advertises an ``end_session_endpoint`` in the discovery
@@ -699,25 +857,40 @@ class OIDCAuth:
         Otherwise the method returns the local ``post_logout_redirect_uri`` or
         ``/``.
 
+        Without ``id_token_hint`` the provider cannot tell whose session to
+        end and usually asks the user to confirm the logout (Keycloak shows
+        "Do you want to log out?" and a "Back to application" link).
+
         :param post_logout_redirect_uri: Local URI to redirect to after logout.
+        :param id_token_hint: The ID token from the login
+            (:attr:`~py_oidc_auth.schema.Token.id_token`).
         :returns: Redirect target URL.
+        :raises InvalidRequest: 503 if the provider is unavailable.
 
         Request example
 
         .. code-block:: text
 
-            GET /auth/v2/logout?post_logout_redirect_uri=https%3A%2F%2Fapp.example.org HTTP/1.1
+            GET /auth/v2/logout?post_logout_redirect_uri=https%3A%2F%2Fapp.example.org
+                &id_token_hint=eyJhbGciOi... HTTP/1.1
             Host: app.example.org
 
         """
         await self._ensure_auth_initialized()
         redirect_target = post_logout_redirect_uri or "/"
+        if not self.config.oidc_overview:
+            raise InvalidRequest(
+                status_code=503,
+                detail="OIDC provider unavailable: no discovery document.",
+            )
         end_session = self.config.oidc_overview.get("end_session_endpoint")
 
         if end_session:
             params: Dict[str, str] = {"client_id": self.config.client_id}
             if post_logout_redirect_uri:
                 params["post_logout_redirect_uri"] = post_logout_redirect_uri
+            if id_token_hint:
+                params["id_token_hint"] = id_token_hint
             redirect_target = f"{end_session}?{urlencode(params)}"
         else:
             logger.warning("OIDC provider does not advertise end_session_endpoint.")

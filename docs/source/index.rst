@@ -94,7 +94,7 @@ Supported frameworks
 Features
 ~~~~~~~~
 
-* Authorization code flow with PKCE (login and callback)
+* Authorization code flow with client side PKCE (and a legacy server side mode)
 * Refresh token flow
 * Device authorization flow
 * Userinfo lookup
@@ -165,6 +165,41 @@ Adapters can expose these paths (customizable and individually disableable):
 * ``POST /auth/v2/device``
 * ``GET  /auth/v2/logout``
 * ``GET  /auth/v2/userinfo``
+
+PKCE, state and logout
+~~~~~~~~~~~~~~~~~~~~~~
+
+Clients should keep their PKCE verifier to themselves. Make a verifier,
+send only its S256 challenge and your own ``state`` to the login endpoint,
+let the provider redirect to your own callback, check ``state`` there and
+redeem the code at the token endpoint with the verifier:
+
+.. code-block:: text
+
+   GET  /auth/v2/login?redirect_uri=http://localhost:53100/callback
+        &code_challenge=<base64url(sha256(verifier)), no padding>&state=<random>
+   ...  browser comes back to http://localhost:53100/callback?code=...&state=...
+   POST /auth/v2/token   code=...&redirect_uri=...&code_verifier=<verifier>
+
+The device flow works the same way: send ``code_challenge`` to
+``POST /auth/v2/device`` and ``code_verifier`` with every poll of the token
+endpoint. Keycloak (25 and later) then refuses the device code without the
+verifier.
+
+A login without ``code_challenge`` still works: the server makes the
+verifier and carries it, with the redirect URI, in ``state`` for
+``/auth/v2/callback``. That gives no PKCE protection (whoever sees the
+redirect sees code and verifier together) and logs a warning. Once your
+clients send challenges, set ``require_client_pkce=True`` to refuse such
+logins and device flows and to disable ``/auth/v2/callback``.
+
+Token responses carry the provider's ``id_token`` (not in broker mode). Pass
+it to ``GET /auth/v2/logout?id_token_hint=...`` so the provider ends the
+session without asking the user to confirm.
+
+The token endpoint takes ``refresh_token`` and ``device_code``; the older
+``refresh-token`` and ``device-code`` still work. When the provider cannot
+be reached, the endpoints answer 503.
 
 Adding custom routes
 ~~~~~~~~~~~~~~~~~~~~
@@ -371,6 +406,7 @@ custom routes to it, and include it in your app:
 
            from typing import Dict, List
            from litestar import Litestar, get
+           from litestar.di import NamedDependency
            from py_oidc_auth import LitestarOIDCAuth, IDToken
 
            auth = LitestarOIDCAuth(
@@ -389,9 +425,8 @@ custom routes to it, and include it in your app:
            async def auth_ports() -> Dict[str, List[int]]:
                return {"valid_ports": [8080, 8443]}
 
-           @get("/protected")
-           @auth.required()
-           async def protected(token: IDToken) -> Dict[str, str]:
+           @get("/protected", dependencies={"token": auth.required()})
+           async def protected(token: NamedDependency[IDToken]) -> Dict[str, str]:
                return {"sub": token.sub}
 
            app = Litestar(

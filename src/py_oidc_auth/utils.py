@@ -347,6 +347,13 @@ async def oidc_request(
             return result
     except InvalidRequest:
         raise
+    except httpx.TransportError as exc:
+        # Connection refused, DNS failure, timeout: the provider is not
+        # there right now. That is a 503 for our clients, not a bad gateway.
+        raise InvalidRequest(
+            status_code=503,
+            detail=f"OIDC provider unavailable: {exc}",
+        )
     except Exception as exc:
         raise InvalidRequest(
             status_code=502,
