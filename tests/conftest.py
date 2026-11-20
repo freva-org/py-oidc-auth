@@ -827,6 +827,30 @@ def _available_backends() -> list:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _require_keycloak() -> None:
+    """Stop the run at once when the test realm cannot be reached.
+
+    Nearly every test talks to Keycloak. Without it hundreds of them fail
+    with errors that look unrelated (KeyError, 503 instead of 200, ...).
+    """
+    problem: Optional[str] = None
+    try:
+        res = requests.get(DISCOVERY_URL, timeout=5)
+        if res.status_code != 200:
+            problem = f"HTTP {res.status_code}"
+        elif "token_endpoint" not in res.json():
+            problem = "no token_endpoint in the answer"
+    except (requests.RequestException, ValueError) as exc:
+        problem = repr(exc)
+    if problem:
+        pytest.exit(
+            f"No OIDC discovery document at {DISCOVERY_URL} ({problem}). "
+            "Start the dev Keycloak (dev-env/docker-compose.yaml) with the "
+            "freva realm imported, or set OIDC_DISCOVERY_URL."
+        )
+
+
 @pytest.fixture(scope="session")
 def oidc_auth() -> OIDCAuth:
     """A fully configured OIDCAuth instance pointing at the real Keycloak."""

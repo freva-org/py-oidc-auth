@@ -24,10 +24,18 @@ import requests
 from pytest_mock import MockerFixture
 
 from py_oidc_auth import OIDCAuth
+from py_oidc_auth.auth_base import _split_legacy_state
 from py_oidc_auth.exceptions import InvalidRequest
+from py_oidc_auth.schema import Token
 from py_oidc_auth.utils import OIDCConfig
 
-from .conftest import CLIENT_ID, DISCOVERY_URL, TEST_PASSWORD, TEST_USER
+from .conftest import (
+    CLIENT_ID,
+    DISCOVERY_URL,
+    TEST_PASSWORD,
+    TEST_USER,
+    _find_free_port,
+)
 
 REDIRECT_CODES = (301, 302, 303, 307, 308)
 # Registered for the freva client in the dev realm; nothing listens there.
@@ -220,6 +228,58 @@ class TestClientPKCELogin:
         assert browser.go("GET", logout.headers["location"], stop=CLIENT_CALLBACK) == (
             CLIENT_CALLBACK
         )
+
+
+class TestLegacyState:
+    @pytest.mark.parametrize(
+        ("state", "redirect_uri", "verifier"),
+        [
+            ("s|http://localhost/cb|v", "http://localhost/cb", "v"),
+            ("s|http://localhost/cb?next=a|b|v", "http://localhost/cb?next=a|b", "v"),
+            ("s|http://localhost/cb|x|y|v", "http://localhost/cb|x|y", "v"),
+        ],
+    )
+    def test_split(self, state: str, redirect_uri: str, verifier: str) -> None:
+        assert _split_legacy_state(state) == (redirect_uri, verifier)
+
+    @pytest.mark.parametrize(
+        "state", ["no-pipes", "s|only-two", "s||v", "s|http://localhost/cb|"]
+    )
+    def test_split_rejects(self, state: str) -> None:
+        with pytest.raises(InvalidRequest) as exc:
+            _split_legacy_state(state)
+        assert exc.value.status_code == 400
+
+    async def test_callback_keeps_pipe_in_redirect_uri(
+        self, mocker: MockerFixture
+    ) -> None:
+        auth = OIDCAuth(client_id=CLIENT_ID, discovery_url=DISCOVERY_URL)
+        redirect_uri = f"{CLIENT_CALLBACK}?next=a|b"
+        url = await auth.login(redirect_uri=redirect_uri, prompt="none")
+        token = mocker.patch.object(
+            auth,
+            "token",
+            new_callable=AsyncMock,
+            return_value=Token(
+                access_token="a",
+                token_type="Bearer",
+                expires=1,
+                refresh_token=None,
+                refresh_expires=None,
+                scope="openid",
+            ),
+        )
+        await auth.callback(code="c", state=query(url)["state"])
+        sent = token.call_args.kwargs
+        assert sent["redirect_uri"] == redirect_uri
+        challenge = (
+            base64.urlsafe_b64encode(
+                hashlib.sha256(sent["code_verifier"].encode()).digest()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        assert challenge == query(url)["code_challenge"]
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +478,56 @@ class TestProviderUnavailable:
         assert exc.value.status_code == 502
 
 
+class TestDiscoveryErrors:
+    """A broken discovery URL is not the same as a provider that is down."""
+
+    @staticmethod
+    async def _login_error(discovery_url: str) -> InvalidRequest:
+        auth = OIDCAuth(client_id=CLIENT_ID, discovery_url=discovery_url)
+        with pytest.raises(InvalidRequest) as exc:
+            await auth.login(
+                redirect_uri=CLIENT_CALLBACK,
+                prompt="none",
+                code_challenge=pkce_pair()[1],
+            )
+        return exc.value
+
+    async def test_wrong_realm_is_502_with_reason(self) -> None:
+        url = DISCOVERY_URL.replace("/.well-known/", "-no-such-realm/.well-known/")
+        error = await self._login_error(url)
+        assert error.status_code == 502
+        assert "404" in error.detail and url in error.detail
+
+    async def test_nobody_listening_is_503(self) -> None:
+        port = _find_free_port()
+        error = await self._login_error(
+            f"http://127.0.0.1:{port}/.well-known/openid-configuration"
+        )
+        assert error.status_code == 503
+
+    @pytest.mark.parametrize(
+        ("response", "status"),
+        [
+            (httpx.Response(503, text="starting"), 503),
+            (httpx.Response(200, text="<html>maintenance</html>"), 502),
+        ],
+    )
+    async def test_answer_decides_status(
+        self, mocker: MockerFixture, response: httpx.Response, status: int
+    ) -> None:
+        response.request = httpx.Request("GET", "http://idp.example.org/")
+        mocker.patch("httpx.Client.get", return_value=response)
+        error = await self._login_error("http://idp.example.org/.well-known/x")
+        assert error.status_code == status
+
+    async def test_logout_reports_it_too(self) -> None:
+        url = DISCOVERY_URL.replace("/.well-known/", "-no-such-realm/.well-known/")
+        auth = OIDCAuth(client_id=CLIENT_ID, discovery_url=url)
+        with pytest.raises(InvalidRequest) as exc:
+            await auth.logout(CLIENT_CALLBACK)
+        assert exc.value.status_code == 502
+
+
 # ---------------------------------------------------------------------------
 # require_client_pkce
 # ---------------------------------------------------------------------------
@@ -448,6 +558,52 @@ class TestRequireClientPKCE:
         with pytest.raises(InvalidRequest) as exc:
             await strict.callback(code="c", state="s|http://localhost/cb|v")
         assert exc.value.status_code == 400
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"code": "c", "redirect_uri": CLIENT_CALLBACK},
+            {"device_code": "d"},
+            {"code": "c", "refresh_token": "r"},
+        ],
+    )
+    async def test_redeeming_needs_verifier(
+        self, strict: OIDCAuth, mocker: MockerFixture, kwargs: Dict[str, str]
+    ) -> None:
+        mock = mocker.patch(_MOCK_TARGET, new_callable=AsyncMock)
+        with pytest.raises(InvalidRequest) as exc:
+            await strict.token("/t", **kwargs)
+        assert exc.value.status_code == 400
+        assert "code_verifier" in exc.value.detail
+        mock.assert_not_called()
+
+    async def test_verifier_lets_the_code_through(
+        self, strict: OIDCAuth, mocker: MockerFixture
+    ) -> None:
+        mock = mocker.patch(
+            _MOCK_TARGET,
+            new_callable=AsyncMock,
+            return_value=httpx.Response(400, json={"error": "invalid_grant"}),
+        )
+        with pytest.raises(InvalidRequest):
+            await strict.token(
+                "/t", code="c", redirect_uri=CLIENT_CALLBACK, code_verifier="v"
+            )
+        assert _sent_form(mock)["code_verifier"] == "v"
+
+    async def test_refresh_needs_no_verifier(
+        self, strict: OIDCAuth, refresh_token: str
+    ) -> None:
+        token = await strict.token("/t", refresh_token=refresh_token)
+        assert token.access_token
+
+    async def test_refresh_wins_over_device_code(
+        self, strict: OIDCAuth, refresh_token: str
+    ) -> None:
+        token = await strict.token(
+            "/t", refresh_token=refresh_token, device_code="ignored"
+        )
+        assert token.access_token
 
     async def test_legacy_warning_is_logged_once(
         self, caplog: pytest.LogCaptureFixture

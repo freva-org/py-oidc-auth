@@ -48,7 +48,7 @@ conda install -c conda-forge py-oidc-auth-fastapi  # conda equivalents available
 - claims: dict | None — optional claim constraints for token validation
 - offline_access: bool — if True, include offline_access scope to request refresh tokens
 - timeout_sec: int — HTTP timeout for discovery and provider calls
-- require_client_pkce: bool — refuse logins/device flows without a client code_challenge and disable /callback
+- require_client_pkce: bool — refuse logins/device flows without a client code_challenge, refuse code/device-code redemption without code_verifier, and disable /callback
 
 ### Built-in endpoints (created by the router methods)
 - GET  /auth/v2/login — start authorization code flow; clients send code_challenge (S256) and state, keep the verifier
@@ -58,7 +58,7 @@ conda install -c conda-forge py-oidc-auth-fastapi  # conda equivalents available
 - GET  /auth/v2/logout — redirect to provider end session endpoint; pass id_token_hint to skip confirmation
 - GET  /auth/v2/userinfo — fetch user profile using bearer token
 All paths are customisable and individually disableable by passing None.
-All answer 503 when the provider cannot be reached.
+All answer 503 when the provider cannot be reached, 502 when its discovery URL gives no discovery document (wrong URL or realm).
 
 ### Route protection
 - auth.required(scopes="...", claims={...}) — enforces authentication; returns IDToken or raises 401/403

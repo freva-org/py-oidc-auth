@@ -191,7 +191,11 @@ verifier and carries it, with the redirect URI, in ``state`` for
 ``/auth/v2/callback``. That gives no PKCE protection (whoever sees the
 redirect sees code and verifier together) and logs a warning. Once your
 clients send challenges, set ``require_client_pkce=True`` to refuse such
-logins and device flows and to disable ``/auth/v2/callback``.
+logins and device flows, to refuse codes and device codes redeemed without
+``code_verifier`` and to disable ``/auth/v2/callback``. Also set the
+provider client to require S256 (in Keycloak: client, Advanced, "Proof Key
+for Code Exchange Code Challenge Method"), so that codes obtained from the
+provider directly need a verifier too.
 
 Token responses carry the provider's ``id_token`` (not in broker mode). Pass
 it to ``GET /auth/v2/logout?id_token_hint=...`` so the provider ends the
@@ -199,7 +203,9 @@ session without asking the user to confirm.
 
 The token endpoint takes ``refresh_token`` and ``device_code``; the older
 ``refresh-token`` and ``device-code`` still work. When the provider cannot
-be reached, the endpoints answer 503.
+be reached, the endpoints answer 503; when its discovery URL answers but
+gives no discovery document (a wrong URL or realm), they answer 502 with the
+reason.
 
 Adding custom routes
 ~~~~~~~~~~~~~~~~~~~~

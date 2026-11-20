@@ -143,6 +143,22 @@ def _check_challenge(code_challenge: str, method: Optional[str]) -> None:
         )
 
 
+def _split_legacy_state(state: str) -> Tuple[str, str]:
+    """Return ``(redirect_uri, verifier)`` from a legacy mode ``state``.
+
+    ``state`` is ``<client state>|<redirect_uri>|<verifier>``. The first part
+    and the verifier never contain ``|`` (:meth:`OIDCAuth.login` refuses such
+    a client state and the verifier is base64url), the redirect URI may.
+
+    :raises InvalidRequest: 400 if ``state`` does not have that form.
+    """
+    _, sep, rest = state.partition("|")
+    redirect_uri, sep2, verifier = rest.rpartition("|")
+    if not (sep and sep2 and redirect_uri and verifier):
+        raise InvalidRequest(400, detail="Invalid state format")
+    return redirect_uri, verifier
+
+
 def _set_request_header(
     client_id: str,
     client_secret: Optional[str],
@@ -212,7 +228,8 @@ class OIDCAuth:
         accepted for cross-instance federation.
     :param broker_jwks_path: Path appended to peer URLs when fetching JWKS.
     :param require_client_pkce: Refuse logins and device flows that bring no
-        ``code_challenge`` of their own, and disable :meth:`callback`. Without
+        ``code_challenge`` of their own, refuse to redeem a code or device
+        code without ``code_verifier``, and disable :meth:`callback`. Without
         it, such logins fall back to a server made verifier carried in
         ``state``, which keeps old clients working but protects nothing.
 
@@ -393,22 +410,48 @@ class OIDCAuth:
                 "restriction. Consider setting broker_mode=True."
             )
 
+    def _discovery(self) -> Dict[str, Any]:
+        """Return the discovery document, or say why there is none.
+
+        :returns: The discovery document.
+        :raises InvalidRequest: 503 when the provider is unreachable or
+            answers with a server error, 502 when it answers but not with a
+            discovery document (a wrong ``discovery_url`` or realm gives 404,
+            a page that is not JSON gives a decode error).
+        """
+        overview = self.config.oidc_overview
+        if overview:
+            return overview
+        error = self.config.discovery_error
+        url = self.config.discovery_url
+        if isinstance(error, httpx.HTTPStatusError):
+            status = error.response.status_code
+            if status < 500:
+                raise InvalidRequest(
+                    status_code=502,
+                    detail=f"OIDC discovery at {url} answered {status}: "
+                    "check discovery_url.",
+                )
+        elif error is not None and not isinstance(error, httpx.TransportError):
+            raise InvalidRequest(
+                status_code=502,
+                detail=f"OIDC discovery at {url} gave no usable document: {error}",
+            )
+        raise InvalidRequest(
+            status_code=503,
+            detail=f"OIDC provider unavailable: {error or 'no discovery document.'}",
+        )
+
     def _endpoint(self, endpoint_key: str) -> str:
         """Look an endpoint up in the discovery document.
 
         :param endpoint_key: Key in the discovery document.
         :returns: The endpoint URL.
-        :raises InvalidRequest: 503 when the discovery document could not be
-            loaded (the provider is down or unreachable), 502 when it was
-            loaded but lacks the endpoint.
+        :raises InvalidRequest: 503 or 502 when the discovery document could
+            not be loaded (see :meth:`_discovery`), 502 when it lacks the
+            endpoint.
         """
-        overview = self.config.oidc_overview
-        if not overview:
-            raise InvalidRequest(
-                status_code=503,
-                detail="OIDC provider unavailable: no discovery document.",
-            )
-        url = overview.get(endpoint_key)
+        url = self._discovery().get(endpoint_key)
         if not url:
             raise InvalidRequest(
                 status_code=502,
@@ -542,7 +585,7 @@ class OIDCAuth:
             (in legacy mode as the first part of ``state``).
         :returns: URL to redirect the browser to.
         :raises InvalidRequest: 400 for missing or invalid parameters, 503 if
-            the provider is unavailable.
+            the provider is unavailable, 502 if discovery fails otherwise.
 
         Example
         -------
@@ -645,10 +688,7 @@ class OIDCAuth:
             )
         if not code or not state:
             raise InvalidRequest(400, detail="Missing code or state")
-        try:
-            _, redirect_uri, code_verifier = state.split("|", 2)
-        except ValueError:
-            raise InvalidRequest(400, detail="Invalid state format")
+        redirect_uri, code_verifier = _split_legacy_state(state)
 
         method = self.broker_token if self.broker_mode else self.token
         token = await method(
@@ -752,7 +792,9 @@ class OIDCAuth:
         :param code_verifier: PKCE verifier whose challenge was sent at login
             or at the start of the device flow.
         :returns: Parsed :class:`~py_oidc_auth.schema.Token`.
-        :raises InvalidRequest: If inputs are missing or the provider call fails.
+        :raises InvalidRequest: If inputs are missing (with
+            ``require_client_pkce`` also ``code_verifier`` for a code or
+            device code) or the provider call fails.
 
         Request examples
         ----------------
@@ -792,6 +834,11 @@ class OIDCAuth:
         """
         data: Dict[str, str] = {}
         headers: Dict[str, str] = {}
+        # Same order as the branches below: a code wins over a refresh token,
+        # a refresh token over a device code.
+        redeems_code = bool(code or (device_code and not refresh_token))
+        if self.require_client_pkce and redeems_code and not code_verifier:
+            raise InvalidRequest(400, detail="code_verifier is required (S256 PKCE).")
         if code:
             data["redirect_uri"] = redirect_uri or urljoin(self.config.proxy, endpoint)
             data["grant_type"] = "authorization_code"
@@ -865,7 +912,8 @@ class OIDCAuth:
         :param id_token_hint: The ID token from the login
             (:attr:`~py_oidc_auth.schema.Token.id_token`).
         :returns: Redirect target URL.
-        :raises InvalidRequest: 503 if the provider is unavailable.
+        :raises InvalidRequest: 503 if the provider is unavailable, 502 if
+            discovery fails otherwise.
 
         Request example
 
@@ -878,12 +926,7 @@ class OIDCAuth:
         """
         await self._ensure_auth_initialized()
         redirect_target = post_logout_redirect_uri or "/"
-        if not self.config.oidc_overview:
-            raise InvalidRequest(
-                status_code=503,
-                detail="OIDC provider unavailable: no discovery document.",
-            )
-        end_session = self.config.oidc_overview.get("end_session_endpoint")
+        end_session = self._discovery().get("end_session_endpoint")
 
         if end_session:
             params: Dict[str, str] = {"client_id": self.config.client_id}

@@ -9,13 +9,17 @@ v2611.0.0
   and ``state`` to ``/login`` and redeem the code at ``/token`` with their
   verifier. Logins without a challenge keep the old behaviour (verifier in
   ``state``, no protection) and log a warning;
-  ``require_client_pkce=True`` refuses them and disables ``/callback``.
+  ``require_client_pkce=True`` refuses them, refuses codes and device
+  codes redeemed without ``code_verifier`` and disables ``/callback``.
 * Device flow: an optional ``code_challenge`` is forwarded to the provider,
   and ``code_verifier`` is sent with every poll.
 * Token responses carry the provider's ``id_token`` (not in broker mode);
   ``/logout`` accepts ``id_token_hint``.
 * ``/login``, ``/logout``, ``/device``, ``/token`` and ``/callback`` answer
-  503 instead of 500 or 502 when the provider cannot be reached.
+  503 instead of 500 or 502 when the provider cannot be reached, and 502
+  naming the cause when the discovery URL answers without a discovery
+  document (for example 404 for a wrong realm).
+* ``/callback`` (legacy mode) handles redirect URIs that contain ``|``.
 * ``/token`` accepts ``refresh_token`` and ``device_code`` besides the old
   ``refresh-token`` and ``device-code``.
 * Depend on ``sqlalchemy[asyncio]``: importing the library failed without

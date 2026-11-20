@@ -91,6 +91,8 @@ class OIDCConfig:
     def __post_init__(self) -> None:
         """Post init."""
         self._oidc_overview: Optional[Dict[str, Payload]] = None
+        # Why the last discovery fetch failed, for error reporting.
+        self.discovery_error: Optional[Exception] = None
         self.timeout = self.timeout or httpx.Timeout(10)
         self.scopes = list(self.scopes or [])
 
@@ -101,7 +103,8 @@ class OIDCConfig:
         If the discovery document has not been loaded yet, it is fetched from
         :attr:`discovery_url`.
 
-        :returns: Discovery document as a dict. Returns an empty dict on failure.
+        :returns: Discovery document as a dict. Returns an empty dict on
+            failure and keeps the exception in :attr:`discovery_error`.
 
         Notes
         -----
@@ -121,7 +124,9 @@ class OIDCConfig:
                 resp.raise_for_status()
                 if resp.status_code == 200:
                     self._oidc_overview = resp.json()
+                    self.discovery_error = None
         except Exception as exc:
+            self.discovery_error = exc
             logger.exception("Failed to fetch OIDC discovery: %s", exc)
         return self._oidc_overview or {}
 
