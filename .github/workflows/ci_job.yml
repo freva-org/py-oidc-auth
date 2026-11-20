@@ -15,20 +15,29 @@ jobs:
   lint-and-docs:
     name: Linting
     runs-on: ubuntu-latest
+    # The same recipes `just lint`, `just types` and `just docs` run in the
+    # dev container, run here straight on the runner.
+    env:
+      JUST: just -f dev-env/container.just -d .
 
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - name: Setup Python ${{ matrix.python-version }}
+      - name: Setup Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.14"
       - name: Install packages
-        run: |
-          python3 -m pip install tox flit
-      - name: Linting, type checking and docs with tox
-        run: tox -p 3 --parallel-no-spinner
+        run: python3 -m pip install -e .[dev]
+      - name: Linting
+        run: $JUST lint
+      - name: Type checking
+        if: ${{ !cancelled() }}
+        run: $JUST types
+      - name: Docs
+        if: ${{ !cancelled() }}
+        run: $JUST docs
 
   integration_tests:
     runs-on: ubuntu-latest
@@ -78,17 +87,14 @@ jobs:
         with:
           python-version: ${{matrix.python-version}}
       - name: Install dependencies
-        run: |
-          python3 -m pip install tox
+        run: python3 -m pip install -e .[dev]
       - name: Set up services
-        run: |
-          docker compose -f dev-env/docker-compose.yaml up -d --remove-orphans
-      - name: Waiting for keycloak
-        run: >
-          python dev-env/dev_utils.py oidc
-          http://localhost:8080/realms/freva/.well-known/openid-configuration
+        # Only Keycloak and the user bootstrap: the dev services are in the
+        # "dev" profile.
+        run: docker compose -f dev-env/docker-compose.yaml up -d
       - name: Run tests
-        run: tox -e test
+        # Waits for Keycloak, runs the suite with coverage, as `just test`.
+        run: just -f dev-env/container.just -d . test
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:

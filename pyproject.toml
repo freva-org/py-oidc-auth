@@ -53,7 +53,12 @@ quart = ["quart"]
 tornado = ["tornado"]
 litestar = ["litestar>=2.23"]
 django = ["django>=4.0"]
-dev = ["tox", "cryptography", "uvicorn", "py-oidc-auth[all,tests]"]
+dev = ["cryptography",
+       "uvicorn",
+       "watchfiles",
+       "rust-just",
+       "py-oidc-auth[all,tests,lint,docs]",
+       ]
 all = ["py-oidc-auth[fastapi,flask,quart,tornado,litestar,django]"]
 tests = ["pytest",
          "pytest-env",
@@ -68,6 +73,15 @@ tests = ["pytest",
          "asyncpg",
          "aiomysql",
          ]
+lint = ["black",
+        "isort",
+        "flake8",
+        "pytest-stub",
+        "pydocstyle",
+        "codespell",
+        "bandit[toml]",
+        "mypy",
+        ]
 docs = ["sphinx-execute-code-python3",
         "sphinx-code-tabs",
         "sphinx-copybutton",
@@ -128,63 +142,3 @@ exclude_lines = [
     "raise ImportError",
     "except ImportError",
 ]
-
-[tool.tox]
-legacy_tox_ini = """
-[tox]
-min_version = 4.0
-env_list = docs, lint, types
-passenv = *
-[testenv]
-passenv = *
-parallel_show_output = false
-[testenv:test]
-description = "Run the unit tests."
-deps = -e .[dev]
-commands =
-    python3 -m pytest -vv --cov=py_oidc_auth --cov-report=html:coverage_report --junitxml report.xml --cov-report xml tests/
-    python3 -m coverage report --fail-under=98.5 --precision=2
-[testenv:docs]
-description = "Create the documentation."
-deps = -e .[docs]
-       codespell
-allowlist_externals = make
-                      codespell
-commands = python3 -m codespell_lib {posargs: --quiet-level=2} docs/source
-           make -C docs clean
-           make -C docs html
-
-[testenv:lint]
-description = "Check code quality."
-deps = -e .[all]
-       black
-       isort
-       flake8
-       pytest-stub
-       pydocstyle
-       codespell
-       bandit[toml]
-commands =
-    python3 -m isort --check --profile black -t py312 -l 79 src
-    python3 -m flake8 src --count --max-complexity=10 --ignore=F405,F403,E704,W503,C901 --max-line-length=100 --statistics --show-source
-    python3 -m codespell_lib {posargs: --quiet-level=2} src/
-    python3 -m pydocstyle src/py_oidc_auth
-    python3 -m bandit -r src/py_oidc_auth --severity-level medium --confidence-level high
-[testenv:types]
-description = "Static type checking."
-deps = .[all]
-       mypy
-       pytest-stub
-commands = python3 -m mypy --install-types --non-interactive
-[testenv:release]
-description = "Bump a new version."
-deps = git-python
-       packaging
-       requests
-       tomli
-commands = python3 bump.py tag py_oidc_auth
-allowlist_externals = rm
-                      curl
-commands_pre = curl -H 'Cache-Control: no-cache' -Ls -o bump.py https://raw.githubusercontent.com/freva-org/freva-admin/main/release.py
-commands_post = rm bump.py
-"""
