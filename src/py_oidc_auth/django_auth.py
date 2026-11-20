@@ -249,6 +249,9 @@ class DjangoOIDCAuth(OIDCAuth):
                         prompt=prompt,
                         offline_access=offline_access,
                         scope=scope,
+                        code_challenge=request.GET.get("code_challenge"),
+                        code_challenge_method=request.GET.get("code_challenge_method"),
+                        state=request.GET.get("state"),
                     )
                 except InvalidRequest as exc:
                     exc.log_traceback()
@@ -277,7 +280,10 @@ class DjangoOIDCAuth(OIDCAuth):
                 request: HttpRequest,
             ) -> HttpResponse:
                 try:
-                    result = await auth.device_flow()
+                    result = await auth.device_flow(
+                        code_challenge=request.POST.get("code_challenge"),
+                        code_challenge_method=request.POST.get("code_challenge_method"),
+                    )
                 except InvalidRequest as exc:
                     exc.log_traceback()
                     return _error_response(exc.status_code, exc.detail)
@@ -290,8 +296,12 @@ class DjangoOIDCAuth(OIDCAuth):
             async def token_view(request: HttpRequest) -> HttpResponse:
                 code = request.POST.get("code")
                 redirect_uri = request.POST.get("redirect_uri")
-                refresh_token = request.POST.get("refresh-token")
-                device_code = request.POST.get("device-code")
+                refresh_token = request.POST.get("refresh_token") or request.POST.get(
+                    "refresh-token"
+                )
+                device_code = request.POST.get("device_code") or request.POST.get(
+                    "device-code"
+                )
                 code_verifier = request.POST.get("code_verifier")
                 grant_type = request.POST.get("grant_type")
                 subject_token = request.POST.get("subject_token")
@@ -334,7 +344,14 @@ class DjangoOIDCAuth(OIDCAuth):
 
             async def logout_view(request: HttpRequest) -> HttpResponse:
                 post_logout_redirect_uri = request.GET.get("post_logout_redirect_uri")
-                target = await auth.logout(post_logout_redirect_uri)
+                try:
+                    target = await auth.logout(
+                        post_logout_redirect_uri,
+                        id_token_hint=request.GET.get("id_token_hint"),
+                    )
+                except InvalidRequest as exc:
+                    exc.log_traceback()
+                    return _error_response(exc.status_code, exc.detail)
                 return HttpResponseRedirect(target)
 
             patterns.append(path(logout, logout_view, name="oidc-logout"))

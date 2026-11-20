@@ -34,6 +34,11 @@ import pytest
 import requests
 
 from py_oidc_auth import IDToken, OIDCAuth
+
+try:  # Litestar resolves handler annotations in this module's namespace.
+    from litestar.di import NamedDependency  # noqa: F401
+except ImportError:  # pragma: no cover
+    pass
 from py_oidc_auth.utils import OIDCConfig
 
 # ---------------------------------------------------------------------------
@@ -507,7 +512,7 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
     ls = LitestarOIDCAuth(**_make_auth_kwargs(auth))
 
     @get("/protected", dependencies={"token": ls.required()})
-    async def protected(token: IDToken) -> dict:
+    async def protected(token: NamedDependency[IDToken]) -> dict:
         return {
             "sub": token.sub,
             "preferred_username": token.preferred_username,
@@ -521,7 +526,7 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
             )
         },
     )
-    async def protected_claims(token: IDToken) -> dict:
+    async def protected_claims(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get(
@@ -532,11 +537,11 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
             )
         },
     )
-    async def protected_bad_claims(token: IDToken) -> dict:
+    async def protected_bad_claims(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get("/optional", dependencies={"token": ls.optional()})
-    async def optional_auth(token: Optional[IDToken]) -> dict:
+    async def optional_auth(token: NamedDependency[Optional[IDToken]]) -> dict:
         if token:
             return {"authenticated": True, "sub": token.sub}
         return {"authenticated": False}
@@ -545,21 +550,21 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
         "/scoped-valid",
         dependencies={"token": ls.required(scopes="profile email")},
     )
-    async def scoped_valid(token: IDToken) -> dict:
+    async def scoped_valid(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub, "scope": token.scope}
 
     @get(
         "/scoped-single",
         dependencies={"token": ls.required(scopes="profile")},
     )
-    async def scoped_single(token: IDToken) -> dict:
+    async def scoped_single(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get(
         "/scoped-bad",
         dependencies={"token": ls.required(scopes="admin superuser")},
     )
-    async def scoped_bad(token: IDToken) -> dict:
+    async def scoped_bad(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get(
@@ -568,7 +573,7 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
             "token": ls.required(scopes="profile nonexistent-scope")
         },
     )
-    async def scoped_partial(token: IDToken) -> dict:
+    async def scoped_partial(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get(
@@ -580,7 +585,7 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
             )
         },
     )
-    async def scoped_and_claims(token: IDToken) -> dict:
+    async def scoped_and_claims(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get(
@@ -592,7 +597,7 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
             )
         },
     )
-    async def scoped_ok_claims_bad(token: IDToken) -> dict:
+    async def scoped_ok_claims_bad(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     @get(
@@ -604,7 +609,7 @@ def _create_litestar_app(auth: OIDCAuth) -> Any:
             )
         },
     )
-    async def scoped_bad_claims_ok(token: IDToken) -> dict:
+    async def scoped_bad_claims_ok(token: NamedDependency[IDToken]) -> dict:
         return {"sub": token.sub}
 
     app = Litestar(
@@ -820,6 +825,30 @@ def _available_backends() -> list:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _require_keycloak() -> None:
+    """Stop the run at once when the test realm cannot be reached.
+
+    Nearly every test talks to Keycloak. Without it hundreds of them fail
+    with errors that look unrelated (KeyError, 503 instead of 200, ...).
+    """
+    problem: Optional[str] = None
+    try:
+        res = requests.get(DISCOVERY_URL, timeout=5)
+        if res.status_code != 200:
+            problem = f"HTTP {res.status_code}"
+        elif "token_endpoint" not in res.json():
+            problem = "no token_endpoint in the answer"
+    except (requests.RequestException, ValueError) as exc:
+        problem = repr(exc)
+    if problem:
+        pytest.exit(
+            f"No OIDC discovery document at {DISCOVERY_URL} ({problem}). "
+            "Start the dev Keycloak (dev-env/docker-compose.yaml) with the "
+            "freva realm imported, or set OIDC_DISCOVERY_URL."
+        )
 
 
 @pytest.fixture(scope="session")

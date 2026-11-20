@@ -134,4 +134,5 @@ class TestOidcRequest:
                 "POST",
                 timeout=httpx.Timeout(1),
             )
-        assert exc_info.value.status_code == 502
+        # Nobody listening: the provider is unavailable, not a bad gateway.
+        assert exc_info.value.status_code == 503

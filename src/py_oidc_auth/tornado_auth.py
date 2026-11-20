@@ -288,6 +288,13 @@ class TornadoOIDCAuth(OIDCAuth):
                             prompt=prompt,
                             offline_access=offline_access,
                             scope=scope,
+                            code_challenge=self.get_query_argument(
+                                "code_challenge", None
+                            ),
+                            code_challenge_method=self.get_query_argument(
+                                "code_challenge_method", None
+                            ),
+                            state=self.get_query_argument("state", None),
                         )
                     except InvalidRequest as exc:
                         exc.log_traceback()
@@ -319,7 +326,14 @@ class TornadoOIDCAuth(OIDCAuth):
             class DeviceFlowHandler(_BaseHandler):
                 async def post(self) -> None:
                     try:
-                        result = await self.oidc_auth.device_flow()
+                        result = await self.oidc_auth.device_flow(
+                            code_challenge=self.get_body_argument(
+                                "code_challenge", None
+                            ),
+                            code_challenge_method=self.get_body_argument(
+                                "code_challenge_method", None
+                            ),
+                        )
                     except InvalidRequest as exc:
                         exc.log_traceback()
                         _write_error(self, exc.status_code, exc.detail)
@@ -338,8 +352,12 @@ class TornadoOIDCAuth(OIDCAuth):
                 async def post(self) -> None:
                     code = self.get_body_argument("code", None)
                     redirect_uri = self.get_body_argument("redirect_uri", None)
-                    refresh_token = self.get_body_argument("refresh-token", None)
-                    device_code = self.get_body_argument("device-code", None)
+                    refresh_token = self.get_body_argument(
+                        "refresh_token", None
+                    ) or self.get_body_argument("refresh-token", None)
+                    device_code = self.get_body_argument(
+                        "device_code", None
+                    ) or self.get_body_argument("device-code", None)
                     code_verifier = self.get_body_argument("code_verifier", None)
                     grant_type = self.get_body_argument("grant_type", None)
                     subject_token = self.get_body_argument("subject_token", None)
@@ -390,7 +408,17 @@ class TornadoOIDCAuth(OIDCAuth):
                     post_logout_redirect_uri = self.get_query_argument(
                         "post_logout_redirect_uri", None
                     )
-                    target = await self.oidc_auth.logout(post_logout_redirect_uri)
+                    try:
+                        target = await self.oidc_auth.logout(
+                            post_logout_redirect_uri,
+                            id_token_hint=self.get_query_argument(
+                                "id_token_hint", None
+                            ),
+                        )
+                    except InvalidRequest as exc:
+                        exc.log_traceback()
+                        _write_error(self, exc.status_code, exc.detail)
+                        return
                     self.redirect(target)
 
             routes.append((f"{prefix}{logout}", LogoutHandler, {"oidc_auth": auth}))

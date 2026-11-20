@@ -136,6 +136,11 @@ class Token(BaseModel):
             scope="openid profile",
         )
 
+    ``id_token`` is the provider's ID token, when it issued one. Pass it to
+    the logout endpoint as ``id_token_hint`` so the provider can end the
+    session without asking the user to confirm. In broker mode it is never
+    set: clients get broker JWTs only, no provider tokens.
+
     """
 
     access_token: str
@@ -144,6 +149,7 @@ class Token(BaseModel):
     refresh_token: Optional[str]
     refresh_expires: Optional[int]
     scope: str
+    id_token: Optional[str] = None
 
 
 class DeviceStartResponse(BaseModel):

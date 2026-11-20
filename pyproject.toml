@@ -1,5 +1,5 @@
 [build-system]
-requires = ["flit_core >=3.2", "appdirs"]
+requires = ["flit_core >=3.2"]
 build-backend = "flit_core.buildapi"
 [project]
 name = "py-oidc-auth"
@@ -18,6 +18,7 @@ classifiers = [
                "Programming Language :: Python :: 3.12",
                "Programming Language :: Python :: 3.13",
                "Programming Language :: Python :: 3.14",
+               "Programming Language :: Python :: 3.15",
                "Framework :: FastAPI",
                "Framework :: Flask",
                "Framework :: Django",
@@ -37,7 +38,7 @@ dependencies = [
     "pydantic",
     "platformdirs",
     "PyJWT[crypto]",
-    "sqlalchemy",
+    "sqlalchemy[asyncio]",
     "typing_extensions",
 ]
 [project.urls]
@@ -50,7 +51,7 @@ fastapi = ["fastapi", "python-multipart", "uvicorn"]
 flask = ["flask"]
 quart = ["quart"]
 tornado = ["tornado"]
-litestar = ["litestar"]
+litestar = ["litestar>=2.23"]
 django = ["django>=4.0"]
 dev = ["tox", "cryptography", "uvicorn", "py-oidc-auth[all,tests]"]
 all = ["py-oidc-auth[fastapi,flask,quart,tornado,litestar,django]"]

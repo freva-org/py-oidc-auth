@@ -38,6 +38,11 @@ from py_oidc_auth.broker.store import (
 )
 from py_oidc_auth.schema import IDToken, Token
 
+try:  # Litestar resolves handler annotations in this module's namespace.
+    from litestar.di import NamedDependency  # noqa: F401
+except ImportError:  # pragma: no cover
+    pass
+
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -629,7 +634,7 @@ class TestLitestarBrokerIntegration:
         auth = _make_broker_auth(LitestarOIDCAuth)
 
         @get("/protected", dependencies={"token": auth.required()})
-        async def protected(token: IDToken) -> dict:
+        async def protected(token: NamedDependency[IDToken]) -> dict:
             return {"sub": token.sub}
 
         @get(
@@ -638,11 +643,11 @@ class TestLitestarBrokerIntegration:
                 "token": auth.required(claims={"realm_access.roles": ["nonexistent"]})
             },
         )
-        async def protected_bad_claims(token: IDToken) -> dict:
+        async def protected_bad_claims(token: NamedDependency[IDToken]) -> dict:
             return {"sub": token.sub}
 
         @get("/optional", dependencies={"token": auth.optional()})
-        async def optional_route(token: Optional[IDToken]) -> dict:
+        async def optional_route(token: NamedDependency[Optional[IDToken]]) -> dict:
             return {"authenticated": token is not None}
 
         @get(
@@ -651,7 +656,7 @@ class TestLitestarBrokerIntegration:
                 "token": auth.optional(claims={"realm_access.roles": ["nonexistent"]})
             },
         )
-        async def optional_claims(token: Optional[IDToken]) -> dict:
+        async def optional_claims(token: NamedDependency[Optional[IDToken]]) -> dict:
             return {"authenticated": token is not None}
 
         app = Litestar(

@@ -320,7 +320,9 @@ class FastApiOIDCAuth(OIDCAuth):
 
         .. code-block:: text
 
-            GET /auth/v2/login?redirect_uri=https%3A%2F%2Fapp.example.org%2Fcallback HTTP/1.1
+            GET /auth/v2/login?redirect_uri=http%3A%2F%2Flocalhost%3A53100%2Fcallback
+                &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+                &state=af0ifjsldkj HTTP/1.1
             Host: app.example.org
 
         Callback
@@ -338,7 +340,7 @@ class FastApiOIDCAuth(OIDCAuth):
             Host: app.example.org
             Content-Type: application/x-www-form-urlencoded
 
-            code=abc&redirect_uri=https%3A%2F%2Fapp.example.org%2Fcallback
+            code=abc&redirect_uri=http%3A%2F%2Flocalhost%3A53100%2Fcallback&code_verifier=xyz
 
         Userinfo
 
@@ -368,7 +370,10 @@ class FastApiOIDCAuth(OIDCAuth):
                     307: {
                         "description": "Redirect to the identity provider login page.",
                     },
-                    400: {"description": "Missing redirect_uri."},
+                    400: {
+                        "description": "Missing redirect_uri or invalid PKCE challenge."
+                    },
+                    503: {"description": "Identity provider unavailable."},
                 },
             )
             async def _login(
@@ -398,6 +403,28 @@ class FastApiOIDCAuth(OIDCAuth):
                     Optional[str],
                     Query(title="Scope", description="Requested scopes."),
                 ] = None,
+                code_challenge: Annotated[
+                    Optional[str],
+                    Query(
+                        title="PKCE code challenge",
+                        description=(
+                            "base64url(sha256(code_verifier)) without padding. "
+                            "Keep the verifier and send it to the token "
+                            "endpoint with the code."
+                        ),
+                    ),
+                ] = None,
+                code_challenge_method: Annotated[
+                    Optional[str],
+                    Query(title="PKCE method", description="Only S256."),
+                ] = None,
+                state: Annotated[
+                    Optional[str],
+                    Query(
+                        title="State",
+                        description="Client state, returned by the provider.",
+                    ),
+                ] = None,
             ) -> RedirectResponse:
                 """Initiate the authorization code flow and redirect to the provider."""
                 try:
@@ -406,6 +433,9 @@ class FastApiOIDCAuth(OIDCAuth):
                         prompt=prompt.value,
                         offline_access=offline_access,
                         scope=scope,
+                        code_challenge=code_challenge,
+                        code_challenge_method=code_challenge_method,
+                        state=state,
                     )
                 except InvalidRequest as error:
                     logger.exception(error)
@@ -440,10 +470,27 @@ class FastApiOIDCAuth(OIDCAuth):
         if device_flow:
 
             @router.post(device_flow, response_model=DeviceStartResponse)
-            async def _device_flow() -> DeviceStartResponse:
+            async def _device_flow(
+                code_challenge: Annotated[
+                    Optional[str],
+                    Form(
+                        title="PKCE code challenge",
+                        description=(
+                            "Binds the device code to your verifier; send the "
+                            "verifier with each poll of the token endpoint."
+                        ),
+                    ),
+                ] = None,
+                code_challenge_method: Annotated[
+                    Optional[str], Form(title="PKCE method", description="Only S256.")
+                ] = None,
+            ) -> DeviceStartResponse:
                 """Start the device authorization flow."""
                 try:
-                    return await _deviceflow_func()
+                    return await _deviceflow_func(
+                        code_challenge=code_challenge,
+                        code_challenge_method=code_challenge_method,
+                    )
                 except InvalidRequest as error:
                     error.log_traceback()
                     raise HTTPException(
@@ -468,11 +515,25 @@ class FastApiOIDCAuth(OIDCAuth):
                 # Standard flows
                 code: Annotated[Optional[str], Form()] = None,
                 redirect_uri: Annotated[Optional[str], Form()] = None,
-                refresh_token: Annotated[
-                    Optional[str], Form(alias="refresh-token")
-                ] = None,
-                device_code: Annotated[Optional[str], Form(alias="device-code")] = None,
+                refresh_token: Annotated[Optional[str], Form()] = None,
+                device_code: Annotated[Optional[str], Form()] = None,
                 code_verifier: Annotated[Optional[str], Form()] = None,
+                refresh_token_legacy: Annotated[
+                    Optional[str],
+                    Form(
+                        alias="refresh-token",
+                        deprecated=True,
+                        description="Old name of refresh_token.",
+                    ),
+                ] = None,
+                device_code_legacy: Annotated[
+                    Optional[str],
+                    Form(
+                        alias="device-code",
+                        deprecated=True,
+                        description="Old name of device_code.",
+                    ),
+                ] = None,
                 # RFC 8693 token exchange
                 grant_type: Annotated[Optional[str], Form()] = None,
                 subject_token: Annotated[Optional[str], Form()] = None,
@@ -485,11 +546,12 @@ class FastApiOIDCAuth(OIDCAuth):
             ) -> Token:
                 """Obtain or refresh a broker-scoped JWT.
 
-                **Standard flows** — pass ``device-code`` or ``code`` +
-                ``redirect_uri``.
+                **Standard flows** — pass ``device_code`` or ``code`` +
+                ``redirect_uri``, each with your ``code_verifier`` if you
+                sent a ``code_challenge``.
 
                 **Broker refresh** — pass the current broker JWT as
-                ``refresh-token``.
+                ``refresh_token``.
 
                 **RFC 8693 token exchange** — pass
                 ``grant_type=urn:ietf:params:oauth:grant-type:token-exchange``
@@ -500,8 +562,8 @@ class FastApiOIDCAuth(OIDCAuth):
                         token_endpoint=_token_path,
                         code=code,
                         redirect_uri=redirect_uri,
-                        refresh_token=refresh_token,
-                        device_code=device_code,
+                        refresh_token=refresh_token or refresh_token_legacy,
+                        device_code=device_code or device_code_legacy,
                         code_verifier=code_verifier,
                         subject_token=subject_token,
                         grant_type=grant_type,
@@ -518,11 +580,25 @@ class FastApiOIDCAuth(OIDCAuth):
             async def _passthrough_token(
                 code: Annotated[Optional[str], Form()] = None,
                 redirect_uri: Annotated[Optional[str], Form()] = None,
-                refresh_token: Annotated[
-                    Optional[str], Form(alias="refresh-token")
-                ] = None,
-                device_code: Annotated[Optional[str], Form(alias="device-code")] = None,
+                refresh_token: Annotated[Optional[str], Form()] = None,
+                device_code: Annotated[Optional[str], Form()] = None,
                 code_verifier: Annotated[Optional[str], Form()] = None,
+                refresh_token_legacy: Annotated[
+                    Optional[str],
+                    Form(
+                        alias="refresh-token",
+                        deprecated=True,
+                        description="Old name of refresh_token.",
+                    ),
+                ] = None,
+                device_code_legacy: Annotated[
+                    Optional[str],
+                    Form(
+                        alias="device-code",
+                        deprecated=True,
+                        description="Old name of device_code.",
+                    ),
+                ] = None,
             ) -> Token:
                 """Exchange, refresh, or poll for an IDP token."""
                 try:
@@ -530,8 +606,8 @@ class FastApiOIDCAuth(OIDCAuth):
                         f"{prefix}/{token}",
                         code=code,
                         redirect_uri=redirect_uri,
-                        refresh_token=refresh_token,
-                        device_code=device_code,
+                        refresh_token=refresh_token or refresh_token_legacy,
+                        device_code=device_code or device_code_legacy,
                         code_verifier=code_verifier,
                     )
                 except InvalidRequest as exc:
@@ -558,6 +634,7 @@ class FastApiOIDCAuth(OIDCAuth):
                 logout,
                 responses={
                     307: {"description": "Redirect to post logout URI."},
+                    503: {"description": "Identity provider unavailable."},
                 },
             )
             async def _logout(
@@ -565,9 +642,27 @@ class FastApiOIDCAuth(OIDCAuth):
                     Optional[str],
                     Query(title="Post logout redirect URI"),
                 ] = None,
+                id_token_hint: Annotated[
+                    Optional[str],
+                    Query(
+                        title="ID token hint",
+                        description=(
+                            "The id_token from the token response; lets the "
+                            "provider log out without asking for confirmation."
+                        ),
+                    ),
+                ] = None,
             ) -> RedirectResponse:
                 """Redirect to the provider end session endpoint when available."""
-                return RedirectResponse(await _logout_func(post_logout_redirect_uri))
+                try:
+                    target = await _logout_func(
+                        post_logout_redirect_uri, id_token_hint=id_token_hint
+                    )
+                except InvalidRequest as error:
+                    raise HTTPException(
+                        status_code=error.status_code, detail=error.detail
+                    )
+                return RedirectResponse(target)
 
         if userinfo:
             _userinfo_dep = broker_dependency if self.broker_mode else idp_dependency
