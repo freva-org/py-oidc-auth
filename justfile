@@ -1,5 +1,6 @@
 # py-oidc-auth development.
 #
+#   just setup                    the realm, the dev image and the git hooks
 #   just dev [framework] [args]   Keycloak plus a dev server on :7777
 #   just test [pytest args]       the tests, in a container on Python $PY
 #   just check                    lint, types and tests
@@ -11,6 +12,11 @@
 #
 #   PY=3.11 just test                 another Python version
 #   COMPOSE=podman-compose just dev   podman instead of docker
+#
+# The git hooks in .githooks run the same checks: lint and types before a
+# commit that touches code, what CI runs before a push. `just setup` and
+# `just dev` turn them on, `just hooks-off` turns them off, and
+# `--no-verify` or SKIP_HOOKS=1 skips them.
 #
 # The recipes that run inside the container live in dev-env/container.just;
 # the ones here drive compose from outside.
@@ -43,11 +49,40 @@ default:
     @echo "  keycloak    http://localhost:8080  (admin: keycloak / secret, you: ${USER:-$(id -un)} / secret)"
     @echo "  python      {{ PY }}  (PY=3.11 just ...)"
 
+# --- setup ------------------------------------------------------------------
+
+# Get going: download the realm, build the dev image, turn on the git hooks
+[group('setup')]
+setup: build hooks
+
+# Turn on the git hooks: lint and types before commits, CI before pushes
+[group('setup')]
+hooks:
+    @git config core.hooksPath .githooks
+
+# Turn the git hooks off again
+[group('setup')]
+hooks-off:
+    git config --unset core.hooksPath || true
+
+# Run tools-container recipes for a git hook, in one container start
+[private]
+_hook name *recipes:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name=$1; shift
+    if ! {{ engine }} info >/dev/null 2>&1; then
+      echo "$name hook: {{ engine }} is not running. Start it, or skip the hook with --no-verify." >&2
+      exit 1
+    fi
+    echo "$name hook: just $* (skip with --no-verify)" >&2
+    {{ run }} -T tools just "$@"
+
 # --- the stack --------------------------------------------------------------
 
 # Keycloak plus a dev server, reloading on edits: just dev litestar --no-broker-mode
 [group('stack')]
-dev framework="fastapi" *args: realm up
+dev framework="fastapi" *args: hooks realm up
     #!/usr/bin/env bash
     set -euo pipefail
     # A fixed name, removed before and after: a server left over from an
