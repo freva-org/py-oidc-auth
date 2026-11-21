@@ -417,5 +417,18 @@ be configured to trust each others tokens.
 * **[py-oidc-auth-client](https://pypi.org/project/py-oidc-auth-client/)** — typed Python client for authenticating against services that expose py-oidc-auth-compatible routes.
 
 
+## Development
+Development runs through [just](https://just.systems) and containers
+(Docker or Podman); you do not need Python installed locally:
+
+```console
+just dev litestar     # Keycloak plus a litestar test app on http://localhost:7777
+just test             # the test suite, in a container
+PY=3.11 just test     # on another Python version
+just check            # lint, types and tests
+```
+
+Run `just` for all recipes.
+
 ## Contributing
 See the [CONTRIBUTING.md](CONTRIBUTING.md) document to get involved.

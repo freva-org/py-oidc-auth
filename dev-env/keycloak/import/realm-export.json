@@ -685,8 +685,55 @@
     "authenticationFlowBindingOverrides" : { },
     "fullScopeAllowed" : true,
     "nodeReRegistrationTimeout" : -1,
+    "protocolMappers" : [ {
+      "name" : "audience freva-service",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-audience-mapper",
+      "consentRequired" : false,
+      "config" : {
+        "included.client.audience" : "freva-service",
+        "id.token.claim" : "false",
+        "access.token.claim" : "true",
+        "introspection.token.claim" : "true"
+      }
+    } ],
     "defaultClientScopes" : [ "web-origins", "acr", "profile", "roles", "basic", "email" ],
     "optionalClientScopes" : [ "address", "phone", "organization", "offline_access", "microprofile-jwt" ]
+  }, {
+    "clientId" : "freva-service",
+    "name" : "Confidential test client for token exchange",
+    "description" : "Dev only: exchanges freva tokens (standard token exchange); used by the py-oidc-auth tests.",
+    "enabled" : true,
+    "clientAuthenticatorType" : "client-secret",
+    "secret" : "freva-service-secret",
+    "bearerOnly" : false,
+    "standardFlowEnabled" : false,
+    "implicitFlowEnabled" : false,
+    "directAccessGrantsEnabled" : false,
+    "serviceAccountsEnabled" : false,
+    "publicClient" : false,
+    "protocol" : "openid-connect",
+    "attributes" : {
+      "standard.token.exchange.enabled" : "true"
+    },
+    "fullScopeAllowed" : true,
+    "defaultClientScopes" : [ "web-origins", "acr", "profile", "roles", "basic", "email" ],
+    "optionalClientScopes" : [ "offline_access" ]
+  }, {
+    "clientId" : "other-app",
+    "name" : "Public test client whose tokens are not meant for freva",
+    "description" : "Dev only: no profile scope, so no freva audience; used by the py-oidc-auth tests.",
+    "enabled" : true,
+    "bearerOnly" : false,
+    "standardFlowEnabled" : false,
+    "implicitFlowEnabled" : false,
+    "directAccessGrantsEnabled" : true,
+    "serviceAccountsEnabled" : false,
+    "publicClient" : true,
+    "protocol" : "openid-connect",
+    "fullScopeAllowed" : true,
+    "defaultClientScopes" : [ "web-origins", "acr", "roles", "basic", "email" ],
+    "optionalClientScopes" : [ ]
   }, {
     "id" : "50a4516d-622b-4aee-a554-f0a3b98b89da",
     "clientId" : "realm-management",

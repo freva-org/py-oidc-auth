@@ -9,37 +9,56 @@ framework adapters that provide a consistent user experience.
 
 You will need:
 
-* Python 3.11 or newer
-* tox
-* container engine for the development identity provider (Docker or Podman)
+* [just](https://just.systems)
+* Docker with compose, or Podman with podman-compose
 
-Install tox with:
+Python itself is not needed on your machine: everything except `just release`
+runs in containers, one image per Python version, with the dependencies
+installed into the image's own Python (no virtualenv). Your checkout is
+mounted into the container, so edits apply without a rebuild. A change to
+`pyproject.toml` gets a fresh image on the next run.
+
+Run `just` to see all recipes. Two environment variables pick the setup:
+
+* `PY` sets the Python version (default 3.13): `PY=3.11 just test`
+* `COMPOSE` sets the compose tool (default `docker compose`):
+  `COMPOSE=podman-compose just dev`
+
+## Development servers
+
+`just dev` starts Keycloak and a test app for the framework of your choice
+on <http://localhost:7777>, reloading when you edit the code:
 
 ```console
-python -m pip install tox
+just dev                              # fastapi
+just dev litestar                     # any of: fastapi flask quart tornado litestar django
+just dev django --no-broker-mode      # extra arguments go to dev-env/dev_utils.py
+PY=3.11 just dev flask
 ```
+
+Ctrl-C stops the server; Keycloak keeps running until `just down`.
+
+The test app serves the auth routes under `/api/test/auth/v2/` and these
+endpoints:
+
+- `/protected`: requires a token
+- `/optional`: accepts requests with or without a token
+- `/admin`: requires a token with the admin claim
+
+To log in with a browser, open
+<http://localhost:7777/api/test/auth/v2/login?redirect_uri=http://localhost:7777/api/test/auth/v2/callback>.
 
 ## Development identity provider (IDP)
 
-The development setup uses a Keycloak server as a local OpenID Provider.
+Keycloak runs on <http://localhost:8080> (admin console: `keycloak` /
+`secret`) with the `freva` realm from `dev-env/keycloak/import`. `just up`
+starts it on its own, and the `dev` and `test` recipes start it as needed.
+Inside the dev container Keycloak is `localhost:8080` too, so tokens have
+the same issuer everywhere.
 
-To spin up Keycloak, use docker-compose or podman-compose:
-
-```console
-podman-compose -f dev-env/docker-compose.yaml up -d
-```
-
-If you use Docker:
-
-```console
-docker compose -f dev-env/docker-compose.yaml up -d
-```
-
-Wait until the OIDC service is ready:
-
-```console
-python dev-env/dev_utils.py oidc
-```
+The realm is imported when the Keycloak container is created. After
+changing `realm-export.json`, run `just down` so the next start imports it
+again.
 
 ### IDP accounts
 The development IDP server ships with pre-defined mock accounts those are
@@ -51,92 +70,51 @@ The development IDP server ships with pre-defined mock accounts those are
 - uid: ``bobsmith``, password: ``bobsmith123``
 - uid: ``lisajones``, password: ``lisajones123``
 
-`<YOUR-USER>` is the user name that started the compose command.
-
-
-
-
-## Development servers
-
-Pick your framework extra, then start a simple test server using the
-`dev_utils.py` script.
-
-Example (FastAPI):
-
-```console
-python -m pip install -e .[fastapi]
-python dev-env/dev_utils.py fastapi-server
-```
-
-The utility shows all available commands:
-
-```console
-python dev-env/dev_utils.py --help
-usage: dev_utils.py [-h] {fastapi-server,flask-server,quart-server,tornado-server,litestar-server,django-server,gen-certs,oidc} ...
-
-Various utilities for development purpose.
-
-positional arguments:
-  {fastapi-server,flask-server,quart-server,tornado-server,litestar-server,django-server,gen-certs,oidc}
-    fastapi-server      Run a simple fastapi test server.
-    flask-server        Run a simple flask test server.
-    quart-server        Run a simple quart test server.
-    tornado-server      Run a simple tornado test server.
-    litestar-server     Run a simple litestar test server.
-    django-server       Run a simple django test server.
-    gen-certs           Generate a random pair of public and private certificates.
-    oidc                Wait for the oidc service to start up.
-```
-
-After starting test server, the following endpoints will be available:
-
-- `/api/test/protected`: Enforcing mandatory tokens
-- `/api/test/optional`: Optional tokens
-- `/api/test/admin`: Enforcing mandatory tokens with admin claims.
-
-
+`<YOUR-USER>` is the user name that started Keycloak.
 
 ## Testing, linting, and type checks
 
-Automated testing, linting, and type checking is managed with tox.
-
-Run unit tests:
-
 ```console
-tox -e test
+just test                    # the whole suite with coverage
+just test -k pkce -x         # or any pytest arguments
+PY=3.11 just test            # on another Python version
+just test-all                # on every supported version, then a summary
+just lint                    # black, isort, flake8, codespell, pydocstyle, bandit
+just fmt                     # apply black and isort
+just types                   # mypy
+just docs                    # build the docs into docs/build/html
+just check                   # lint, types and test
 ```
 
-Run linting:
+`just shell` opens a shell in the dev container, with Keycloak at
+`localhost:8080`.
+
+The recipes that run inside the container live in `dev-env/container.just`.
+CI runs those same recipes on the runner, after `pip install -e .[dev]`, so
+you can do that too if you prefer working without containers:
 
 ```console
-tox -e lint
+python -m pip install -e .[dev]
+docker compose -f dev-env/docker-compose.yaml up -d     # Keycloak only
+just -f dev-env/container.just -d . test
 ```
 
-Run mypy:
+## Housekeeping
 
-```console
-tox -e types
-```
+* `just ps` and `just logs [service]` show what is running
+* `just down` stops Keycloak and anything else still running
+* `just build` / `just rebuild` build the dev image for `$PY`
+* `just clean` stops everything and removes all dev images
 
-Build documentation:
+With Docker, the container runs with your user and group id, so files it
+writes into the checkout (coverage reports, `docs/build`) belong to you.
+Rootless Podman does that by itself. On rootless Docker, set
+`DEV_AS_USER=0`.
 
-```console
-tox -e docs
-```
+## Releases
 
-List all environments:
-
-```console
-tox list
-```
-
-Typical environments include:
-
-* docs
-* lint
-* types
-* test
-* release
+`just release` tags a new version. It runs on your machine, because it uses
+your git credentials, and needs `python3` and `git`.
 
 ## Documentation expectations
 

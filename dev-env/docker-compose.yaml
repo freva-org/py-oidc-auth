@@ -1,43 +1,80 @@
----
+# py-oidc-auth development stack.
+#
+#   just dev [framework]   Keycloak plus a dev server on http://localhost:7777
+#   just test              the test suite, in a container
+#
+# Plain `docker compose -f dev-env/docker-compose.yaml up -d` (or
+# podman-compose) starts only Keycloak and the user bootstrap: the dev
+# services sit in the "dev" profile. That is what CI does.
+#
+# The dev container shares Keycloak's network namespace, so inside it
+# Keycloak is localhost:8080, the same URL the host, the browser and CI use.
+# That keeps a single token issuer without any hostname tricks. It also
+# means the dev server's port is published on the keycloak service.
+#
+# The credentials are throwaway dev values.
+name: py-oidc-auth-dev
+
+x-dev-image: &dev-image
+  profiles: [dev]
+  image: localhost/py-oidc-auth-dev:py${PY:-3.13}-${DEPS_HASH:-latest}
+  build:
+    context: ..
+    dockerfile: dev-env/Containerfile
+    args:
+      PY: ${PY:-3.13}
+  volumes:
+    - ..:/src:z
+  init: true
+  environment: &dev-env
+    # The justfile may run the container as your uid, which has no passwd
+    # entry in the image; getpass.getuser() (used by some drivers) then
+    # falls back to $USER.
+    USER: ${USER:-dev}
+
 services:
   keycloak:
-    networks:
-      - freva-rest
-    image: quay.io/keycloak/keycloak
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.8}
     environment:
-      KEYCLOAK_ADMIN: keycloak
-      KEYCLOAK_ADMIN_PASSWORD: secret
+      KC_BOOTSTRAP_ADMIN_USERNAME: keycloak
+      KC_BOOTSTRAP_ADMIN_PASSWORD: secret
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
       JAVA_OPTS_APPEND: "-Djava.net.preferIPv4Stack=true"
-    hostname: keycloak
     volumes:
-      - ./certs:/certs
-      - ./keycloak/import:/opt/keycloak/data/import:z
+      - ./keycloak/import:/opt/keycloak/data/import:ro,z
     ports:
       - "8080:8080"
-      - "8443:8443"
-    command: |
-         start-dev
-         --hostname-strict=false
-         --import-realm
-         -Dkeycloak.migration.strategy=OVERWRITE_EXISTING
+      - "7777:7777"  # the dev server, see above
+    command:
+      - start-dev
+      - --hostname-strict=false
+      - --import-realm
+    restart: unless-stopped
 
+  # Creates a Keycloak user named after you ($USER, password "secret").
   keycloak-bootstrap:
     image: docker.io/badouralix/curl-jq
-    depends_on:
-      - keycloak
+    depends_on: [keycloak]
     volumes:
-      - ./create-user.sh:/create-user.sh:ro
+      - ./create-user.sh:/create-user.sh:ro,z
     environment:
-      USER: ${USER}
+      USER: ${USER:-freva}
       KEYCLOAK_ADMIN: keycloak
       KEYCLOAK_ADMIN_PASSWORD: secret
       KEYCLOAK_HOST: keycloak:8080
     entrypoint: ["sh", "/create-user.sh"]
-    networks:
-      - freva-rest
+    restart: "no"
 
-networks:
-  freva-rest:
-    driver: bridge
+  # Tests and dev servers: needs Keycloak, reaches it as localhost:8080.
+  dev:
+    <<: *dev-image
+    network_mode: service:keycloak
+    depends_on: [keycloak]
+    environment:
+      <<: *dev-env
+      OIDC_DISCOVERY_URL: http://localhost:8080/realms/freva/.well-known/openid-configuration
+
+  # Lint, types, docs and shells: same image, no Keycloak needed.
+  tools:
+    <<: *dev-image

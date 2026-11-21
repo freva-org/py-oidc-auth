@@ -1,0 +1,32 @@
+# Dev image for py-oidc-auth: one per Python version, dependencies only.
+#
+# The justfile builds it on first use (or with `just build`). The package
+# itself is not installed: the checkout is mounted at /src and imported from
+# /src/src through PYTHONPATH, so edits apply without a rebuild. The image
+# tag carries a hash of pyproject.toml, so a dependency change gets a fresh
+# image and nothing else does. No virtualenv: the container is the
+# environment.
+ARG PY=3.13
+FROM docker.io/library/python:${PY}-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    PIP_NO_CACHE_DIR=1
+
+# Install what .[dev] pulls in (every framework, test, lint and docs tools,
+# just), then drop the package itself again.
+COPY pyproject.toml README.md LICENSE /build/
+COPY src /build/src
+RUN python -m pip install "/build[dev]" \
+ && python -m pip uninstall --yes py-oidc-auth \
+ && rm -rf /build
+
+# `just <recipe>` in the container runs dev-env/container.just in /src.
+# HOME is writable whichever uid the justfile runs the container as.
+ENV PYTHONPATH=/src/src \
+    JUST_JUSTFILE=/src/dev-env/container.just \
+    JUST_WORKING_DIRECTORY=/src \
+    HOME=/tmp
+WORKDIR /src
