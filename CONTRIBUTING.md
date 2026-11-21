@@ -89,6 +89,21 @@ just check                   # lint, types and test
 `just shell` opens a shell in the dev container, with Keycloak at
 `localhost:8080`.
 
+## Git hooks
+
+`just setup` (realm, dev image, hooks) and `just dev` turn on the hooks in
+`.githooks`:
+
+* **pre-commit** runs `lint` and `types` (a few seconds), only for commits
+  that touch `src/`, `tests/` or `pyproject.toml`. It checks the working tree,
+  unstaged edits included. If it fails on formatting, `just fmt` fixes it.
+* **pre-push** runs what CI runs: `lint`, `types` and `docs`, then the tests
+  on `$PY`. That starts Keycloak if it is not running and leaves it up for the
+  next push. `PREPUSH_ALL=1 git push` tests every Python version.
+
+Both need docker or podman running. Skip them once with `--no-verify`, for a
+whole shell with `SKIP_HOOKS=1`, or turn them off with `just hooks-off`.
+
 The recipes that run inside the container live in `dev-env/container.just`.
 CI runs those same recipes on the runner, after `pip install -e .[dev]`, so
 you can do that too if you prefer working without containers:

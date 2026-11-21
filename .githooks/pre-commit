@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Before a commit that touches code: lint and types, in the tools container.
+#
+# Turned on by `just setup`, `just dev` or `just hooks`; off with
+# `just hooks-off`. Skip once with `git commit --no-verify`, or for a whole
+# shell with SKIP_HOOKS=1. It checks the working tree, so unstaged edits
+# count too.
+set -euo pipefail
+
+[ "${SKIP_HOOKS:-0}" = "1" ] && exit 0
+
+# Commits that only touch docs, README or CI need none of this.
+if ! git diff --cached --name-only | grep -qE '^(src/|tests/|pyproject\.toml$)'; then
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+exec just _hook pre-commit lint types </dev/null
