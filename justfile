@@ -32,6 +32,9 @@ engine := if compose =~ "podman" { "podman" } else { "docker" }
 as_user := env("DEV_AS_USER", if compose =~ "podman" { "0" } else { "1" })
 run := dc + " run --rm" + if as_user == "1" { " --user " + `id -u` + ":" + `id -g` } else { "" }
 
+# The dev realm's single source of truth.
+realm_url := env("REALM_URL", "https://raw.githubusercontent.com/freva-org/freva-service-config/refs/heads/main/keycloak/import/realm-export.json")
+
 [private]
 default:
     @just --justfile {{ justfile() }} --list
@@ -44,7 +47,7 @@ default:
 
 # Keycloak plus a dev server, reloading on edits: just dev litestar --no-broker-mode
 [group('stack')]
-dev framework="fastapi" *args: up
+dev framework="fastapi" *args: realm up
     #!/usr/bin/env bash
     set -euo pipefail
     # A fixed name, removed before and after: a server left over from an
@@ -53,6 +56,12 @@ dev framework="fastapi" *args: up
     {{ engine }} rm -f "$name" >/dev/null 2>&1 || true
     trap '{{ engine }} rm -f "$name" >/dev/null 2>&1 || true' EXIT
     {{ run }} --name "$name" dev just serve "$@"
+
+# Download the latest dev realm from freva-service-config
+[group('stack')]
+realm:
+    mkdir -p dev-env/keycloak/import
+    curl -fsSL -o dev-env/keycloak/import/realm-export.json "{{ realm_url }}"
 
 # Start Keycloak (and create your user) in the background
 [group('stack')]
@@ -76,19 +85,19 @@ logs *services:
 
 # Open a shell in the dev image (with Keycloak at localhost:8080)
 [group('stack')]
-shell: up
+shell: realm up
     {{ run }} dev bash
 
 # --- quality ----------------------------------------------------------------
 
 # Run the tests on $PY: all with coverage, or `pytest ARGS`: just test -k pkce
 [group('quality')]
-test *args: up
+test *args: realm up
     {{ run }} dev just test "$@"
 
 # Run the tests on every supported Python version, then list what failed
 [group('quality')]
-test-all *args: up
+test-all *args: realm up
     #!/usr/bin/env bash
     set -uo pipefail
     failed=()
@@ -130,12 +139,12 @@ check: lint types test
 
 # Build the dev image for $PY (happens on first use anyway)
 [group('images')]
-build:
+build: realm
     {{ dc }} --profile dev build dev
 
 # Rebuild the dev image for $PY from scratch, pulling the base image
 [group('images')]
-rebuild:
+rebuild: realm
     {{ dc }} --profile dev build --pull --no-cache dev
 
 # Stop everything and remove all dev images, for every Python version
