@@ -1,0 +1,9 @@
+# The only image built from this checkout is the dev image
+# (dev-env/Containerfile). It needs just enough for pip to resolve the
+# dependencies; the code itself is mounted at run time.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+**/__pycache__

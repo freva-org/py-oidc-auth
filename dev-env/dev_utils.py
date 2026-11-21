@@ -449,7 +449,7 @@ def set_env(namespace: argparse.Namespace) -> None:
             os.environ["OIDC_CLIENT_SECRET"] = namespace.client_secret
         os.environ["OIDC_ADMIN_CLAIM"] = namespace.admin_claim
         os.environ["OIDC_SCOPES"] = " ".join(
-            namespace.scopes or ["openid", "profileemail"]
+            namespace.scopes or ["openid", "profile", "email"]
         )
         os.environ["OIDC_BROKER_MODE"] = str(int(namespace.no_broker_mode is False))
         yield
@@ -555,7 +555,7 @@ def add_server_parser(
     parser.add_argument(
         "--scopes",
         type=str,
-        default="openid profile email",
+        default=["openid", "profile", "email"],
         help="OIDC scopes",
         nargs="*",
     )
