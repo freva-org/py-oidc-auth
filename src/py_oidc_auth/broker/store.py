@@ -49,7 +49,8 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, TypeAlias
+
 
 import platformdirs
 from cryptography.hazmat.primitives import serialization
@@ -73,8 +74,9 @@ from typing_extensions import TypedDict
 if TYPE_CHECKING:
     from pymongo.asynchronous.collection import AsyncCollection
     from pymongo.asynchronous.database import AsyncDatabase
-    from pymongo.typings import _DocumentType
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+MongoDocument: TypeAlias = Dict[str, Any]
 
 # ---------------------------------------------------------------------------
 # Shared types
@@ -358,7 +360,7 @@ class MongoDBBrokerStore(BrokerStore):
     def __init__(
         self,
         url: Optional[str] = None,
-        db: Optional["AsyncDatabase[_DocumentType]"] = None,
+        db: Optional["AsyncDatabase[MongoDocument]"] = None,
     ) -> None:
         try:
             from pymongo import AsyncMongoClient
@@ -373,11 +375,11 @@ class MongoDBBrokerStore(BrokerStore):
         self._setup_done = False
 
     @property
-    def _sessions(self) -> "AsyncCollection[_DocumentType]":
+    def _sessions(self) -> "AsyncCollection[MongoDocument]":
         return self._db["broker_sessions"]
 
     @property
-    def _keys(self) -> object:
+    def _keys(self) -> "AsyncCollection[MongoDocument]":
         return self._db["broker_keys"]
 
     async def setup(self) -> None:
@@ -393,17 +395,17 @@ class MongoDBBrokerStore(BrokerStore):
 
     async def load_or_create_signing_key(self) -> str:
         """Return the PEM-encoded RSA private key, creating it if absent."""
-        doc = await self._keys.find_one({"_id": self._SIGNING_KEY_ID})  # type: ignore[attr-defined]
+        doc = await self._keys.find_one({"_id": self._SIGNING_KEY_ID})
         if doc:
             return str(doc["pem"])
 
         pem = self._generate_rsa_pem()
-        await self._keys.update_one(  # type: ignore[attr-defined]
+        await self._keys.update_one(
             {"_id": self._SIGNING_KEY_ID},
             {"$setOnInsert": {"pem": pem}},
             upsert=True,
         )
-        doc = await self._keys.find_one({"_id": self._SIGNING_KEY_ID})  # type: ignore[attr-defined]
+        doc = await self._keys.find_one({"_id": self._SIGNING_KEY_ID})
         return str(doc["pem"]) if doc else pem
 
     async def save_session(
@@ -457,7 +459,7 @@ class MongoDBBrokerStore(BrokerStore):
         :param jwks: JWKS document from the peer.
         """
         doc_id = f"{self._PEER_PREFIX}{issuer_url}"
-        await self._keys.replace_one(  # type: ignore[attr-defined]
+        await self._keys.replace_one(
             {"_id": doc_id},
             {
                 "_id": doc_id,
@@ -474,9 +476,7 @@ class MongoDBBrokerStore(BrokerStore):
         :returns: List of ``(issuer_url, jwks)`` tuples.
         """
         result: list[tuple[str, JWKSDict]] = []
-        async for doc in self._keys.find(  # type: ignore[attr-defined]
-            {"_id": {"$regex": f"^{self._PEER_PREFIX}"}}
-        ):
+        async for doc in self._keys.find({"_id": {"$regex": f"^{self._PEER_PREFIX}"}}):
             result.append((str(doc["issuer_url"]), doc["jwks"]))
         return result
 
