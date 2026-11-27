@@ -404,6 +404,16 @@ def admin(token: IDToken) -> Dict[str, str]:
     return {"sub": token.sub}
 ```
 
+Scope checks also apply in broker mode, where broker tokens carry the scope the
+Identity Provider granted.
+
+Clients may ask for fewer scopes at login (`/login?scope=...`), but only narrow
+the configured ones: every requested scope must be in `scopes`, `openid`,
+`offline_access` or `allowed_scopes`, otherwise the request is refused (400,
+`invalid_scope`). The Identity Provider still decides what it grants: Keycloak
+always adds a client's *default* client scopes, so a request can only leave out
+*optional* ones.
+
 
 ## Token minting and federation
 The `broker_mode=True` option allows for the creation of minting of application

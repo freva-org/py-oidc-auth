@@ -84,7 +84,7 @@ import json
 import logging
 import re
 import secrets
-from typing import Any, Dict, Optional, Set, Tuple, Union, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union, cast
 from urllib.parse import urlencode, urljoin
 
 import httpx
@@ -232,6 +232,9 @@ class OIDCAuth:
         code without ``code_verifier``, and disable :meth:`callback`. Without
         it, such logins fall back to a server made verifier carried in
         ``state``, which keeps old clients working but protects nothing.
+    :param allowed_scopes: Space separated scopes a client may ask for at
+        login besides *scopes*, ``openid`` and ``offline_access``.  Clients
+        can only narrow the configured scopes otherwise.
 
     Example
     -------
@@ -299,6 +302,7 @@ class OIDCAuth:
         trusted_issuers: Optional[list[str]] = None,
         broker_jwks_path: str = "/auth/v2/.well-known/jwks.json",
         require_client_pkce: bool = False,
+        allowed_scopes: str = "",
     ) -> None:
         self._lock = asyncio.Lock()
         self.config = OIDCConfig(
@@ -328,6 +332,11 @@ class OIDCAuth:
         self._broker_lock = asyncio.Lock()
 
         self.require_client_pkce = require_client_pkce
+        #: Scopes a client may ask for at login besides the configured
+        #: ones, ``openid`` and ``offline_access``.
+        self.allowed_scopes: List[str] = [
+            s for s in allowed_scopes.split() if s.strip()
+        ]
         self._warned_legacy_pkce = False
 
     async def _ensure_auth_initialized(self) -> None:
@@ -550,6 +559,49 @@ class OIDCAuth:
         except (pyjwt.InvalidTokenError, pyjwt.ExpiredSignatureError):
             raise InvalidRequest(401, detail="Invalid token")
 
+    def requested_scopes(self, scope: Optional[str]) -> List[str]:
+        """Check the scopes a client asks for at login.
+
+        A client may only narrow the configured scopes: everything it asks
+        for must be a configured scope, ``openid``, ``offline_access`` or
+        one of ``allowed_scopes``.  Without a request the configured
+        scopes apply.
+
+        Note that the identity provider decides what it grants.  Keycloak,
+        for one, always adds the client's *default* client scopes; a
+        request can only leave out *optional* ones.
+
+        :param scope: Space separated scopes from the client, or ``None``.
+        :returns: The scopes to ask the identity provider for.
+        :raises InvalidRequest: 400 (``invalid_scope``) for any other scope.
+        """
+        requested = [s for s in (scope or "").split() if s.strip()]
+        if not requested:
+            return list(self.config.scopes or [])
+        permitted = set(self.config.scopes or [])
+        permitted |= {"openid", "offline_access"} | set(self.allowed_scopes)
+        refused = sorted(set(requested) - permitted)
+        if refused:
+            raise InvalidRequest(
+                400,
+                detail=(
+                    "invalid_scope: not allowed: "
+                    f"{' '.join(refused)} (allowed: {' '.join(sorted(permitted))})"
+                ),
+            )
+        return requested
+
+    @staticmethod
+    def _missing_scopes(token: IDToken, required: Iterable[str]) -> List[str]:
+        """Return the *required* scopes a token was not granted, sorted.
+
+        Broker JWTs carry the scope the identity provider granted at login.
+        Tokens minted before that, and tokens of peers that do not add it,
+        have none, so they only pass when no scope is required.
+        """
+        granted = set((token.scope or "").split())
+        return sorted(set(required) - granted)
+
     async def login(
         self,
         redirect_uri: Optional[str],
@@ -629,19 +681,16 @@ class OIDCAuth:
             state = (
                 f"{state or secrets.token_urlsafe(16)}|{redirect_uri}|{code_verifier}"
             )
+        scopes_list = self.requested_scopes(scope)
         await self._ensure_auth_initialized()
         authorization_endpoint = self._endpoint("authorization_endpoint")
-        scope = scope or ""
         nonce = secrets.token_urlsafe(16)
-        scopes_list = (
-            [s.strip() for s in scope.split() if s.strip()] or self.config.scopes or []
-        )
         scopes_list += ["offline_access"] if offline_access else []
         query = {
             "response_type": "code",
             "client_id": self.config.client_id,
             "redirect_uri": redirect_uri,
-            "scope": " ".join(set(scopes_list + ["openid"])),
+            "scope": " ".join(sorted(set(scopes_list + ["openid"]))),
             "state": state,
             "nonce": nonce,
             "prompt": prompt.replace("none", ""),
@@ -1119,6 +1168,7 @@ class OIDCAuth:
             roles=idp_claims.flattened_roles,
             preferred_username=username,
             expiry_seconds=expiry_seconds,
+            scope=idp_token.scope or idp_claims.scope,
         )
         refresh_exp = idp_token.refresh_expires
         await broker.save_session(
@@ -1233,6 +1283,7 @@ class OIDCAuth:
             email=idp_claims.email,
             roles=idp_claims.flattened_roles,
             preferred_username=username,
+            scope=idp_claims.scope,
         )
 
         now = _dt.datetime.now(tz=_dt.timezone.utc)
