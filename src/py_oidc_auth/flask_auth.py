@@ -154,6 +154,11 @@ class FlaskOIDCAuth(OIDCAuth):
                         bearer, claims=effective_claims
                     ):
                         return _error_response(403, "Insufficient claims.")
+                    missing = self._missing_scopes(token, scope_set)
+                    if missing:
+                        return _error_response(
+                            403, f"Token missing required scopes: {', '.join(missing)}"
+                        )
                 else:
                     try:
                         token = asyncio.run(
@@ -213,6 +218,8 @@ class FlaskOIDCAuth(OIDCAuth):
                             if effective_claims and not token_field_matches(
                                 bearer, claims=effective_claims
                             ):
+                                token = None
+                            if token and self._missing_scopes(token, scope_set):
                                 token = None
                         except pyjwt.PyJWTError:
                             pass

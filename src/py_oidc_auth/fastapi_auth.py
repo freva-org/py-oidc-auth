@@ -138,7 +138,9 @@ class FastApiOIDCAuth(OIDCAuth):
         scope_list = [s.strip() for s in scopes.split() if s.strip()]
         if self.broker_mode:
             return Security(
-                self._create_broker_dependency(required=True, claims=claims),
+                self._create_broker_dependency(
+                    required=True, claims=claims, scopes=scope_list
+                ),
                 scopes=scope_list,
             )
         return Security(
@@ -176,7 +178,9 @@ class FastApiOIDCAuth(OIDCAuth):
         scope_list = [s.strip() for s in scopes.split() if s.strip()]
         if self.broker_mode:
             return Security(
-                self._create_broker_dependency(required=False, claims=claims),
+                self._create_broker_dependency(
+                    required=False, claims=claims, scopes=scope_list
+                ),
                 scopes=scope_list,
             )
         return Security(
@@ -190,6 +194,7 @@ class FastApiOIDCAuth(OIDCAuth):
         self,
         required: bool = True,
         claims: Optional[Dict[str, Any]] = None,
+        scopes: Optional[Sequence[str]] = None,
     ) -> Callable[
         [Optional[HTTPAuthorizationCredentials]],
         Awaitable[Optional[IDToken]],
@@ -222,6 +227,14 @@ class FastApiOIDCAuth(OIDCAuth):
             ):
                 if required:
                     raise HTTPException(status_code=403, detail="Insufficient claims.")
+                return None
+            missing = self._missing_scopes(token, scopes or ())
+            if missing:
+                if required:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Token missing required scopes: {', '.join(missing)}",
+                    )
                 return None
             return token
 

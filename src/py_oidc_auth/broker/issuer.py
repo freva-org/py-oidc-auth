@@ -238,6 +238,7 @@ class TokenBroker:
         roles: list[str],
         preferred_username: Optional[str] = None,
         expiry_seconds: int = 3600,
+        scope: Optional[str] = None,
     ) -> tuple[str, str]:
         """Mint a signed broker JWT.
 
@@ -246,6 +247,8 @@ class TokenBroker:
         :param roles: Flat list of role strings.
         :param preferred_username: Display name; defaults to ``sub``.
         :param expiry_seconds: Token lifetime in seconds.
+        :param scope: Space separated scopes the identity provider granted;
+            left out of the token when empty.
         :returns: ``(encoded_jwt, jti)`` tuple.
         """
         jti = str(uuid.uuid4())
@@ -261,6 +264,8 @@ class TokenBroker:
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(seconds=expiry_seconds)).timestamp()),
         }
+        if scope:
+            payload["scope"] = scope
         token: str = pyjwt.encode(
             payload,
             self.private_key,

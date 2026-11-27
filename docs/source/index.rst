@@ -460,6 +460,37 @@ FastAPI Example:
    def admin(token: IDToken) -> Dict[str, str]:
        return {"sub": token.sub}
 
+Scope checks work the same in broker mode: broker tokens carry the scope the
+Identity Provider granted at login.  Broker tokens minted by older versions,
+or by peers that do not add it, carry none, so they only pass routes that do
+not require a scope.
+
+Scopes clients ask for at login
+"""""""""""""""""""""""""""""""
+
+``/login?scope=...`` lets a client ask for fewer scopes than configured.  It
+may only *narrow* them: every requested scope must be one of ``scopes``,
+``openid``, ``offline_access`` or ``allowed_scopes``; anything else is
+refused with 400 (``invalid_scope``).  Without ``scope`` the configured scopes
+apply.  To let clients ask for further scopes of their own choosing, list them
+explicitly:
+
+.. code-block:: python
+
+   auth = FastApiOIDCAuth(
+       client_id="my-app",
+       discovery_url="https://kc.example.org/realms/demo/.well-known/openid-configuration",
+       scopes="openid profile email",
+       allowed_scopes="data:read",
+   )
+
+The Identity Provider still decides what it grants.  Keycloak always adds a
+client's *default* client scopes, whatever the request says; ``scope`` can only
+leave out *optional* ones.  Asking for ``openid`` alone therefore still yields
+``profile`` and ``email`` if those are default scopes of the client.  Keep the
+client's optional client scopes, above all those with audience mappers, to what
+any user may ask for.
+
 
 Token minting and federation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

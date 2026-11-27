@@ -3,6 +3,21 @@ What's new
 
 This document highlights major changes and additions across releases.
 
+v2612.0.0
+---------
+* ``/login?scope=...`` can only narrow the configured scopes: a requested
+  scope must be one of ``scopes``, ``openid``, ``offline_access`` or the new
+  ``allowed_scopes``, otherwise the login is refused with 400
+  (``invalid_scope``) before the Identity Provider is contacted.  Until now
+  the requested scopes replaced the configured ones unchecked.
+* Broker tokens carry the scope the Identity Provider granted (``scope``
+  claim), from logins, refreshes and exchanges.
+* ``required(scopes=...)`` and ``optional(scopes=...)`` are enforced in broker
+  mode by every adapter; they used to be ignored there.  Only routes that
+  name scopes are affected; broker tokens from older versions carry no scope
+  and fail those routes until they are refreshed.
+* The scopes sent to the Identity Provider are in a stable order.
+
 v2611.0.0
 ---------
 * PKCE now protects logins: clients send their own ``code_challenge`` (S256)

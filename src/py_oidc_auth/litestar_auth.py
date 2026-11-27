@@ -133,6 +133,11 @@ class LitestarOIDCAuth(OIDCAuth):
                     bearer, claims=effective_claims
                 ):
                     raise PermissionDeniedException(detail="Insufficient claims.")
+                missing = self._missing_scopes(token, scope_set)
+                if missing:
+                    raise PermissionDeniedException(
+                        detail=f"Token missing required scopes: {', '.join(missing)}"
+                    )
                 return token
             try:
                 return await self._get_token(
@@ -171,6 +176,8 @@ class LitestarOIDCAuth(OIDCAuth):
                     if effective_claims and not token_field_matches(
                         bearer, claims=effective_claims
                     ):
+                        return None
+                    if self._missing_scopes(token, scope_set):
                         return None
                     return token
                 except pyjwt.PyJWTError:

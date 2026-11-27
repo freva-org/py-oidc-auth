@@ -155,6 +155,14 @@ class TornadoOIDCAuth(OIDCAuth):
                     ):
                         _write_error(handler, 403, "Insufficient claims.")
                         return
+                    missing = self._missing_scopes(token, scope_set)
+                    if missing:
+                        _write_error(
+                            handler,
+                            403,
+                            f"Token missing required scopes: {', '.join(missing)}",
+                        )
+                        return
                 else:
                     try:
                         token = await self._get_token(
@@ -206,6 +214,8 @@ class TornadoOIDCAuth(OIDCAuth):
                             if effective_claims and not token_field_matches(
                                 bearer, claims=effective_claims
                             ):
+                                token = None
+                            if token and self._missing_scopes(token, scope_set):
                                 token = None
 
                         except pyjwt.PyJWTError:
